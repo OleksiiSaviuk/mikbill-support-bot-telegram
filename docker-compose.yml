@@ -10,7 +10,7 @@ services:
     env_file:
       - .env
     volumes:
-      - ./.env:/var/www/html/.env:ro
+      - ./.env:/var/www/html/.env
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1/"]
       interval: 15s
