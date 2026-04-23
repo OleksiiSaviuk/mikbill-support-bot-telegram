@@ -56,6 +56,8 @@ return [
             'enable_start_phone_search' => env('TELEGRAM_ENABLE_START_PHONE_SEARCH', false),
             'history_retention_days' => env('TELEGRAM_HISTORY_RETENTION_DAYS', 7),
             'history_track_limit' => env('TELEGRAM_HISTORY_TRACK_LIMIT', 5000),
+            'history_purge_interval_seconds' => env('TELEGRAM_HISTORY_PURGE_INTERVAL_SECONDS', 300),
+            'history_delete_batch_size' => env('TELEGRAM_HISTORY_DELETE_BATCH_SIZE', 25),
         ],
 
         // 'second_bot' => [

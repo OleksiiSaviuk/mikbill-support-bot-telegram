@@ -131,6 +131,14 @@ TELEGRAM_BOT_ALLOWED_ID="[1234345, 4789456]"
 TELEGRAM_SEARCH_PER_PAGE=5
 # Включает автопоиск по номеру из /start payload вида phone_380971234567
 TELEGRAM_ENABLE_START_PHONE_SEARCH=false
+# Количество дней хранения истории сообщений в чате (автоочистка)
+TELEGRAM_HISTORY_RETENTION_DAYS=7
+# Сколько message_id хранить в кеше для последующей автоочистки
+TELEGRAM_HISTORY_TRACK_LIMIT=5000
+# Как часто (в секундах) запускать автоочистку старых сообщений
+TELEGRAM_HISTORY_PURGE_INTERVAL_SECONDS=300
+# Сколько старых сообщений удалять за один проход (для снижения нагрузки)
+TELEGRAM_HISTORY_DELETE_BATCH_SIZE=25
 
 MIKBILL_CABINET_HOST="https://stat.my-domen.ru"
 MIKBILL_HOST="https://admin.my-domen.ru"
@@ -222,11 +230,31 @@ TELEGRAM_BOT_NAME="name_bot"
 TELEGRAM_BOT_ALLOWED_ID="[1234345, 4789456]"
 TELEGRAM_SEARCH_PER_PAGE=5
 TELEGRAM_ENABLE_START_PHONE_SEARCH=false
+TELEGRAM_HISTORY_RETENTION_DAYS=7
+TELEGRAM_HISTORY_TRACK_LIMIT=5000
+TELEGRAM_HISTORY_PURGE_INTERVAL_SECONDS=300
+TELEGRAM_HISTORY_DELETE_BATCH_SIZE=25
 
 MIKBILL_HOST="https://admin.my-domen.ru"
 MIKBILL_CABINET_HOST="https://stat.my-domen.ru"
 MIKBILL_LOGIN=admin
 MIKBILL_PASSWORD=admin
+```
+
+### Telegram автоочистка истории
+
+- `TELEGRAM_HISTORY_RETENTION_DAYS` — сколько дней хранить сообщения в чате. По умолчанию: `7`.
+- `TELEGRAM_HISTORY_TRACK_LIMIT` — максимальное количество message_id в кеше для одного чата. По умолчанию: `5000`.
+- `TELEGRAM_HISTORY_PURGE_INTERVAL_SECONDS` — минимальный интервал между запусками автоочистки. По умолчанию: `300`.
+- `TELEGRAM_HISTORY_DELETE_BATCH_SIZE` — сколько старых сообщений удалять за один запуск очистки. По умолчанию: `25`.
+
+Рекомендованные значения для более быстрой работы бота:
+
+```shell script
+TELEGRAM_HISTORY_RETENTION_DAYS=7
+TELEGRAM_HISTORY_TRACK_LIMIT=5000
+TELEGRAM_HISTORY_PURGE_INTERVAL_SECONDS=900
+TELEGRAM_HISTORY_DELETE_BATCH_SIZE=10
 ```
 
 3. Запустить контейнеры:

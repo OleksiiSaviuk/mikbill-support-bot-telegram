@@ -159,6 +159,16 @@ abstract class Command extends CommandHandler
             return;
         }
 
+        $purgeIntervalSeconds = max(10, (int)config('telebot.bots.bot.history_purge_interval_seconds', 300));
+        $lastPurgeKey = $this->getLastPurgeAtKey($chatId);
+        $lastPurgeAt = (int)Cache::get($lastPurgeKey, 0);
+
+        if ($lastPurgeAt > 0 && (time() - $lastPurgeAt) < $purgeIntervalSeconds) {
+            return;
+        }
+
+        Cache::put($lastPurgeKey, time(), now()->addDay());
+
         $history = Cache::get($this->getTrackedChatMessagesKey($chatId), []);
 
         if (!is_array($history) || empty($history)) {
@@ -166,11 +176,18 @@ abstract class Command extends CommandHandler
         }
 
         $cutoff = time() - ($retentionDays * 86400);
+        $deleteBatchSize = max(1, (int)config('telebot.bots.bot.history_delete_batch_size', 25));
+        asort($history);
         $changed = false;
+        $deletedCount = 0;
 
         foreach ($history as $messageId => $createdAt) {
             if ((int)$createdAt >= $cutoff) {
                 continue;
+            }
+
+            if ($deletedCount >= $deleteBatchSize) {
+                break;
             }
 
             try {
@@ -184,6 +201,7 @@ abstract class Command extends CommandHandler
 
             unset($history[$messageId]);
             $changed = true;
+            $deletedCount++;
         }
 
         if (!$changed) {
@@ -231,6 +249,11 @@ abstract class Command extends CommandHandler
     protected function getTrackedChatMessagesKey(int $chatId): string
     {
         return $chatId . '_tracked_chat_messages';
+    }
+
+    protected function getLastPurgeAtKey(int $chatId): string
+    {
+        return $chatId . '_chat_history_last_purge_at';
     }
 
     protected function resolveChatId()
