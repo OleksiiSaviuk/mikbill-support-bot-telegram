@@ -9,6 +9,8 @@ services:
       - "8088:80"
     env_file:
       - .env
+    volumes:
+      - ./.env:/var/www/html/.env:ro
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1/"]
       interval: 15s
