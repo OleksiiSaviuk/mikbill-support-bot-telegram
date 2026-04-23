@@ -14,28 +14,32 @@ class StartCommand extends Command
     public function handle()
     {
         $chat_id = $this->update->message->from->id;
+        $phone = $this->getPhoneFromStartPayload();
+        $isPhoneDeepLink = config('telebot.bots.bot.enable_start_phone_search', false) && !empty($phone);
 
-        if (isset($this->update->message->chat->last_name, $this->update->message->chat->first_name)) {
-            $text = "<b>" . trans("hello") . ",  " . $this->update->message->chat->last_name . " " . $this->update->message->chat->first_name . " ! </b> 👋 \n\n";
-        } else {
-            $text = "<b>" . trans("hello") . "! </b> 👋 \n\n";
-        }
-        $text .= trans("your_id") . " " . $chat_id . "\n";
+        if (!$isPhoneDeepLink) {
+            if (isset($this->update->message->chat->last_name, $this->update->message->chat->first_name)) {
+                $text = "<b>" . trans("hello") . ",  " . $this->update->message->chat->last_name . " " . $this->update->message->chat->first_name . " ! </b> 👋 \n\n";
+            } else {
+                $text = "<b>" . trans("hello") . "! </b> 👋 \n\n";
+            }
+            $text .= trans("your_id") . " " . $chat_id . "\n";
 
-        $this->sendMessage([
-            'text'       => $text,
-            'parse_mode' => 'HTML'
-        ]);
-
-        if ($this->isAuth()) {
-
-            $text = trans("auth_success");
             $this->sendMessage([
                 'text'       => $text,
                 'parse_mode' => 'HTML'
             ]);
+        }
 
-            $phone = $this->getPhoneFromStartPayload();
+        if ($this->isAuth()) {
+
+            if (!$isPhoneDeepLink) {
+                $text = trans("auth_success");
+                $this->sendMessage([
+                    'text'       => $text,
+                    'parse_mode' => 'HTML'
+                ]);
+            }
 
             if (config('telebot.bots.bot.enable_start_phone_search', false) && !empty($phone)) {
                 $userId = $this->update->message->from->id;
