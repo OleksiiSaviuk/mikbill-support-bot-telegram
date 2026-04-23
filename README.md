@@ -223,12 +223,22 @@ docker-compose up -d --build
 
 4. Выполнить инициализацию Laravel:
 
+> **Примечание:** из-за ограничений Docker bind-mounted `.env` невозможна.  
+> Генерируйте ключи с флагом `--show` и вставляйте значения вручную в `.env` на хосте.
+
 ```shell script
-docker-compose exec app php artisan key:generate
-docker-compose exec app php artisan jwt:secret
-docker-compose exec app php artisan migrate --force
-docker-compose exec app php artisan config:cache
-docker-compose exec app php artisan route:cache
+# Показать APP_KEY (вставить в .env: APP_KEY=base64:...)
+docker compose exec app php artisan key:generate --show
+
+# Показать JWT_SECRET (вставить в .env: JWT_SECRET=...)
+docker compose exec app php artisan jwt:secret --show
+
+# Затем перезапустить, чтобы применить новые значения из .env
+docker compose down && docker compose up -d
+
+docker compose exec app php artisan migrate --force
+docker compose exec app php artisan config:cache
+docker compose exec app php artisan route:cache
 ```
 
 5. Приложение доступно по адресу:
