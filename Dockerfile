@@ -30,4 +30,6 @@ RUN mkdir -p /var/www/html/storage/framework/cache \
 ENV APACHE_DOCUMENT_ROOT=/var/www/html/public
 
 RUN sed -ri -e 's!/var/www/html!/var/www/html/public!g' /etc/apache2/sites-available/*.conf \
-    && sed -ri -e 's!/var/www/!/var/www/html/public!g' /etc/apache2/apache2.conf
+    && sed -ri -e 's!/var/www/!/var/www/html/public!g' /etc/apache2/apache2.conf \
+    && printf '<Directory /var/www/html/public>\n    AllowOverride All\n    Require all granted\n</Directory>\n' > /etc/apache2/conf-available/laravel-rewrite.conf \
+    && a2enconf laravel-rewrite
