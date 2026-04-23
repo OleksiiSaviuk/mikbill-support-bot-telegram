@@ -19,6 +19,10 @@ class InputCommand extends Command
         $update = $this->update;
         $bot = $this->bot;
 
+        if ($this->getLastAction() == 'menuSearch') {
+            $this->menuSearchUser('all');
+        }
+
         if ($this->getLastAction() == 'menuSearchByLogin') {
             $this->menuSearchUser('login');
         }

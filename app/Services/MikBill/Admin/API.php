@@ -75,6 +75,23 @@ class API extends AdminAPI
                 break;
             case 'phone':
                 return $this->searchByPhone($value);
+                break;
+            case 'all':
+                $results = array_merge(
+                    $this->searchByField('uid', 'uid', $value),
+                    $this->searchByField('user', 'user', $value),
+                    $this->searchByField('uid', 'numdogovor', $value),
+                    $this->searchByPhone($value)
+                );
+
+                $unique = [];
+                foreach ($results as $user) {
+                    if (isset($user['useruid'])) {
+                        $unique[$user['useruid']] = $user;
+                    }
+                }
+
+                return array_values($unique);
         }
 
         return false;
