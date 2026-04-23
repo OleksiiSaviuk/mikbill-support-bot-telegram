@@ -10,7 +10,7 @@ class InputCommand extends Command
 {
     public static function trigger(Update $update, TeleBot $bot)
     {
-        return isset($update->message->text);
+        return isset($update->message->text) && strpos($update->message->text, '/') !== 0;
     }
 
     public function handle()
