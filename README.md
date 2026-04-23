@@ -180,3 +180,67 @@ APP_LOCALE=en
 ```shell script
 /resources/lang/ru.json
 ```
+
+### Запуск через Docker Compose
+
+В проект добавлен `docker-compose.yml` c сервисами:
+
+- `app` (Apache + PHP 8.2)
+- `mysql` (MySQL 8)
+
+Локальный Nginx в compose не используется.
+Если у вас уже есть отдельный reverse proxy (Nginx/Traefik/Caddy), проксируйте его на порт этого хоста:
+
+- `8088` -> HTTP Laravel
+
+1. Подготовить env-файл:
+
+```shell script
+cp .env.example .env
+```
+
+2. Для production окружения проверьте (или добавьте) в `.env`:
+
+```shell script
+APP_ENV=production
+APP_DEBUG=false
+APP_URL=https://your-domain.tld
+
+DB_CONNECTION=mysql
+DB_HOST=mysql
+DB_PORT=3306
+DB_DATABASE=your_db_name
+DB_USERNAME=your_db_user
+DB_PASSWORD=strong_password
+DB_ROOT_PASSWORD=strong_root_password
+```
+
+3. Запустить контейнеры:
+
+```shell script
+docker-compose up -d --build
+```
+
+4. Выполнить инициализацию Laravel:
+
+```shell script
+docker-compose exec app php artisan key:generate
+docker-compose exec app php artisan jwt:secret
+docker-compose exec app php artisan migrate --force
+docker-compose exec app php artisan config:cache
+docker-compose exec app php artisan route:cache
+```
+
+5. Приложение доступно по адресу:
+
+```shell script
+http://localhost:8088
+```
+
+В production рекомендуется использовать только HTTPS-домен через внешний reverse proxy.
+
+Остановка:
+
+```shell script
+docker-compose down
+```
