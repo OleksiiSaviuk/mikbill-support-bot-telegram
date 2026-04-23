@@ -131,7 +131,7 @@ class InputCommand extends Command
                                 ],
                                 [
                                     "text" => trans("cabinet_auth"),
-                                    "url"  => $cabinet_host . "/index/main/lkview/login?l=" . $user['user'] . "&p=" . $user['password']
+                                    "url"  => $cabinet_host . "/?l=" . $user['user'] . "&p=" . $user['password']
                                 ],
                             ],
                             [
