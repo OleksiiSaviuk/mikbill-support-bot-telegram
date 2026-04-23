@@ -189,8 +189,8 @@ class CallBackCommand extends Command
             $text .= "<b>" . trans("tariff") . ":</b> " . $user['tarif'] . "\n";
             $text .= "<b>" . trans("phone_mob") . "</b> " . $user['mob_tel'] . "\n";
             $text .= "<b>" . trans("phone_sms") . ":</b> " . $user['sms_tel'] . "\n";
-            $text .= "<b>" . trans("deposit") . ":</b> " . $user['deposit'] . " " . (isset($systemOptions['data'][0]['UE']) ? $systemOptions['data'][0]['UE'] : 'грн.') . " \n";
-            $text .= "<b>" . trans("credit") . ":</b> " . $user['credit'] . " " . (isset($systemOptions['data'][0]['UE']) ? $systemOptions['data'][0]['UE'] : 'грн.') . " \n";
+            $text .= "<b>" . trans("deposit") . ":</b> " . $this->formatMoney($user['deposit']) . " " . (isset($systemOptions['data'][0]['UE']) ? $systemOptions['data'][0]['UE'] : 'грн.') . " \n";
+            $text .= "<b>" . trans("credit") . ":</b> " . $this->formatMoney($user['credit']) . " " . (isset($systemOptions['data'][0]['UE']) ? $systemOptions['data'][0]['UE'] : 'грн.') . " \n";
             $text .= "<b>Framed IP:</b> " . $user['framed_ip'] . "\n";
             $text .= "<b>Local IP:</b> " . $user['local_ip'] . "\n";
             $text .= "<b>" . trans("internet") . ":</b> " . ($user['blocked'] ? '🚫' : '✅') . "\n";
@@ -424,7 +424,7 @@ class CallBackCommand extends Command
             $text .= "<pre> " . Helpers::str_pad_unicode('Date', 20) . " | " . Helpers::str_pad_unicode('Summa', 10) . " | " . Helpers::str_pad_unicode('Type', 40) . " </pre>\n";
             $text .= "<pre> " . Helpers::str_pad_unicode('-', 20, '-') . " + " . Helpers::str_pad_unicode('-', 10, '-') . " + " . Helpers::str_pad_unicode('-', 40, '-') . " </pre>\n";
             foreach ($history as $row) {
-                $text .= "<pre> " . Helpers::str_pad_unicode($row['date'], 20) . " | " . Helpers::str_pad_unicode($row['summa'], 10) . " | " . Helpers::str_pad_unicode($row['bughtypeid'], 40) . " </pre>\n";
+                $text .= "<pre> " . Helpers::str_pad_unicode($row['date'], 20) . " | " . Helpers::str_pad_unicode($this->formatMoney($row['summa']), 10) . " | " . Helpers::str_pad_unicode($row['bughtypeid'], 40) . " </pre>\n";
             }
 
             $this->sendMessage([

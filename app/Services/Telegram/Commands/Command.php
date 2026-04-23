@@ -65,4 +65,9 @@ abstract class Command extends CommandHandler
 
         return $locale;
     }
+
+    protected function formatMoney($value): string
+    {
+        return number_format((float)$value, 2, '.', '');
+    }
 }
