@@ -134,13 +134,10 @@ MIKBILL_PASSWORD=admin
 
 ```
 
-### 3.2 JWT и ключи
+### 3.2 Ключ додатку
 
 ```shell script
 php artisan key:generate
-
-php artisan jwt:secret
-
 ```
 
 ### 4. Webhook
@@ -229,9 +226,6 @@ docker-compose up -d --build
 ```shell script
 # Показать APP_KEY (вставить в .env: APP_KEY=base64:...)
 docker compose exec app php artisan key:generate --show
-
-# Показать JWT_SECRET (вставить в .env: JWT_SECRET=...)
-docker compose exec app php artisan jwt:secret --show
 
 # Затем перезапустить, чтобы применить новые значения из .env
 docker compose down && docker compose up -d
