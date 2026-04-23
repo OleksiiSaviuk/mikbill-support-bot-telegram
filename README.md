@@ -127,6 +127,8 @@ TELEGRAM_BOT_TOKEN="11111:xxxxxxxxxxxx"
 TELEGRAM_BOT_NAME="name_bot"
 # Список ID пользователей Telegram, которым разрешён доступ (в виде JSON-массива)
 TELEGRAM_BOT_ALLOWED_ID="[1234345, 4789456]"
+# Количество результатов поиска абонентов на одной странице (по умолчанию 5)
+TELEGRAM_SEARCH_PER_PAGE=5
 
 MIKBILL_CABINET_HOST="https://stat.my-domen.ru"
 MIKBILL_HOST="https://admin.my-domen.ru"
@@ -216,6 +218,7 @@ DB_ROOT_PASSWORD=strong_root_password
 TELEGRAM_BOT_TOKEN="11111:xxxxxxxxxxxx"
 TELEGRAM_BOT_NAME="name_bot"
 TELEGRAM_BOT_ALLOWED_ID="[1234345, 4789456]"
+TELEGRAM_SEARCH_PER_PAGE=5
 
 MIKBILL_HOST="https://admin.my-domen.ru"
 MIKBILL_CABINET_HOST="https://stat.my-domen.ru"

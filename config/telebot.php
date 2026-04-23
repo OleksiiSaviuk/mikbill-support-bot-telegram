@@ -51,7 +51,8 @@ return [
                 \App\Services\Telegram\Commands\CallBackCommand::class,
             ],
 
-            'allowed_id' => json_decode(env('TELEGRAM_BOT_ALLOWED_ID', '[]'), true)
+            'allowed_id' => json_decode(env('TELEGRAM_BOT_ALLOWED_ID', '[]'), true),
+            'search_per_page' => env('TELEGRAM_SEARCH_PER_PAGE', 5),
         ],
 
         // 'second_bot' => [
