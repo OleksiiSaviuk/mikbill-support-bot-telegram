@@ -38,7 +38,15 @@ class StartCommand extends Command
             $phone = $this->getPhoneFromStartPayload();
 
             if (config('telebot.bots.bot.enable_start_phone_search', false) && !empty($phone)) {
+                $lastAction = $this->getLastAction();
+                $lastPhone = \Illuminate\Support\Facades\Cache::get($this->user_id . '_last_start_phone');
+                
+                if ($lastAction === 'menuSearchByPhone' && $lastPhone === $phone) {
+                    return;
+                }
+                
                 $this->setLastAction('menuSearchByPhone');
+                \Illuminate\Support\Facades\Cache::put($this->user_id . '_last_start_phone', $phone, now()->addSeconds(5));
                 $this->performUserSearch('phone', $phone);
 
                 return;
