@@ -464,30 +464,18 @@ class CallBackCommand extends Command
         $this->clearUserState();
         $this->setLastAction('menuMain');
 
-        $this->sendMessage([
-            'text'         => trans("history_cleared"),
-            'parse_mode'   => 'HTML',
-            'reply_markup' => [
-                'inline_keyboard' => [
-                    [
-                        [
-                            "text"          => trans("menu_search"),
-                            "callback_data" => "menuSearch"
-                        ],
-                        [
-                            "text"          => trans("menu_locale"),
-                            "callback_data" => "menuLocale"
-                        ]
-                    ],
-                    [
-                        [
-                            "text"          => trans("menu_clear_history"),
-                            "callback_data" => "menuClearHistory"
-                        ]
-                    ]
-                ]
-            ]
-        ]);
+        $fromMessageId = (int)($this->update->callback_query->message->message_id ?? 0);
+        $deleteLimit = (int)config('telebot.bots.bot.clear_history_limit', 0);
+        $this->clearChatHistoryFromMessage($fromMessageId, $deleteLimit);
+
+        try {
+            $this->bot->answerCallbackQuery([
+                'callback_query_id' => $this->update->callback_query->id,
+                'text'              => trans("history_cleared"),
+            ]);
+        } catch (\Throwable $e) {
+            // Ignore callback answer errors after cleanup.
+        }
     }
 
     private function menuLocale()

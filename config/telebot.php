@@ -54,6 +54,8 @@ return [
             'allowed_id' => json_decode(env('TELEGRAM_BOT_ALLOWED_ID', '[]'), true),
             'search_per_page' => env('TELEGRAM_SEARCH_PER_PAGE', 5),
             'enable_start_phone_search' => env('TELEGRAM_ENABLE_START_PHONE_SEARCH', false),
+            'history_retention_days' => env('TELEGRAM_HISTORY_RETENTION_DAYS', 7),
+            'history_track_limit' => env('TELEGRAM_HISTORY_TRACK_LIMIT', 5000),
         ],
 
         // 'second_bot' => [

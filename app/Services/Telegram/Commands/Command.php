@@ -19,6 +19,31 @@ abstract class Command extends CommandHandler
         $this->checkAuth();
 
         app()->setLocale($this->getLocale());
+        $this->trackCurrentUpdateMessage();
+        $this->purgeExpiredChatHistory();
+    }
+
+    public function sendMessage($data = [])
+    {
+        $response = parent::sendMessage($data);
+
+        $chatId = isset($data['chat_id']) ? (int)$data['chat_id'] : (int)$this->resolveChatId();
+
+        if ($chatId > 0) {
+            $messageId = null;
+
+            if (is_object($response) && isset($response->message_id)) {
+                $messageId = (int)$response->message_id;
+            } elseif (is_array($response) && isset($response['message_id'])) {
+                $messageId = (int)$response['message_id'];
+            }
+
+            if (!empty($messageId)) {
+                $this->trackChatMessage($chatId, $messageId);
+            }
+        }
+
+        return $response;
     }
 
     public function isAuth()
@@ -73,6 +98,152 @@ abstract class Command extends CommandHandler
         Cache::forget($this->user_id . '_search_state');
         Cache::forget($this->user_id . '_start_phone_lock');
         Cache::forget($this->user_id . '_last_start_phone');
+    }
+
+    protected function clearChatHistoryFromMessage(int $fromMessageId, int $limit = 0): void
+    {
+        $chatId = $this->resolveChatId();
+
+        if (empty($chatId) || $fromMessageId < 1) {
+            return;
+        }
+
+        $minMessageId = 1;
+
+        if ($limit > 0) {
+            $minMessageId = max(1, $fromMessageId - $limit + 1);
+        }
+
+        for ($messageId = $fromMessageId; $messageId >= $minMessageId; $messageId--) {
+            try {
+                $this->bot->deleteMessage([
+                    'chat_id'    => $chatId,
+                    'message_id' => $messageId,
+                ]);
+            } catch (\Throwable $e) {
+                // Continue deleting remaining messages even if some IDs cannot be deleted.
+            }
+        }
+
+        Cache::forget($this->getTrackedChatMessagesKey((int)$chatId));
+    }
+
+    protected function trackCurrentUpdateMessage(): void
+    {
+        if (isset($this->update->message->chat->id, $this->update->message->message_id)) {
+            $this->trackChatMessage(
+                (int)$this->update->message->chat->id,
+                (int)$this->update->message->message_id
+            );
+        }
+
+        if (isset($this->update->callback_query->message->chat->id, $this->update->callback_query->message->message_id)) {
+            $this->trackChatMessage(
+                (int)$this->update->callback_query->message->chat->id,
+                (int)$this->update->callback_query->message->message_id
+            );
+        }
+    }
+
+    protected function purgeExpiredChatHistory(): void
+    {
+        $retentionDays = (int)config('telebot.bots.bot.history_retention_days', 7);
+
+        if ($retentionDays <= 0) {
+            return;
+        }
+
+        $chatId = (int)$this->resolveChatId();
+
+        if ($chatId <= 0) {
+            return;
+        }
+
+        $history = Cache::get($this->getTrackedChatMessagesKey($chatId), []);
+
+        if (!is_array($history) || empty($history)) {
+            return;
+        }
+
+        $cutoff = time() - ($retentionDays * 86400);
+        $changed = false;
+
+        foreach ($history as $messageId => $createdAt) {
+            if ((int)$createdAt >= $cutoff) {
+                continue;
+            }
+
+            try {
+                $this->bot->deleteMessage([
+                    'chat_id'    => $chatId,
+                    'message_id' => (int)$messageId,
+                ]);
+            } catch (\Throwable $e) {
+                // Ignore deletion errors and still drop stale ID from tracked cache.
+            }
+
+            unset($history[$messageId]);
+            $changed = true;
+        }
+
+        if (!$changed) {
+            return;
+        }
+
+        if (empty($history)) {
+            Cache::forget($this->getTrackedChatMessagesKey($chatId));
+            return;
+        }
+
+        Cache::put(
+            $this->getTrackedChatMessagesKey($chatId),
+            $history,
+            now()->addDays($retentionDays + 2)
+        );
+    }
+
+    protected function trackChatMessage(int $chatId, int $messageId): void
+    {
+        if ($chatId <= 0 || $messageId <= 0) {
+            return;
+        }
+
+        $key = $this->getTrackedChatMessagesKey($chatId);
+        $history = Cache::get($key, []);
+
+        if (!is_array($history)) {
+            $history = [];
+        }
+
+        $history[$messageId] = time();
+
+        $trackLimit = max(100, (int)config('telebot.bots.bot.history_track_limit', 5000));
+
+        if (count($history) > $trackLimit) {
+            asort($history);
+            $history = array_slice($history, -$trackLimit, null, true);
+        }
+
+        $retentionDays = max(7, (int)config('telebot.bots.bot.history_retention_days', 7));
+        Cache::put($key, $history, now()->addDays($retentionDays + 2));
+    }
+
+    protected function getTrackedChatMessagesKey(int $chatId): string
+    {
+        return $chatId . '_tracked_chat_messages';
+    }
+
+    protected function resolveChatId()
+    {
+        if (isset($this->update->callback_query->message->chat->id)) {
+            return $this->update->callback_query->message->chat->id;
+        }
+
+        if (isset($this->update->message->chat->id)) {
+            return $this->update->message->chat->id;
+        }
+
+        return $this->user_id > 0 ? $this->user_id : null;
     }
 
     protected function formatMoney($value): string
