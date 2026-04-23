@@ -185,7 +185,7 @@ APP_LOCALE=en
 
 В проект добавлен `docker-compose.yml` c сервисами:
 
-- `app` (Apache + PHP 8.2)
+- `app` (Apache + PHP 8.1)
 - `mysql` (MySQL 8)
 
 Локальный Nginx в compose не используется.
