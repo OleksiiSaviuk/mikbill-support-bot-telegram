@@ -39,11 +39,10 @@ class StartCommand extends Command
 
             if (config('telebot.bots.bot.enable_start_phone_search', false) && !empty($phone)) {
                 $userId = $this->update->message->from->id;
-                $cacheKey = $userId . '_last_start_phone';
-                $lastPhone = \Illuminate\Support\Facades\Cache::get($cacheKey);
+                $lockKey = $userId . '_start_phone_lock';
                 
-                if ($lastPhone !== $phone) {
-                    \Illuminate\Support\Facades\Cache::put($cacheKey, $phone, now()->addSeconds(3));
+                if (!\Illuminate\Support\Facades\Cache::get($lockKey)) {
+                    \Illuminate\Support\Facades\Cache::put($lockKey, true, now()->addSeconds(2));
                     $this->setLastAction('menuSearchByPhone');
                     $this->performUserSearch('phone', $phone);
                 }
