@@ -125,6 +125,7 @@ DirectoryIndex /public/index.php
 APP_URL=https://my-domen.ru
 TELEGRAM_BOT_TOKEN="11111:xxxxxxxxxxxx"
 TELEGRAM_BOT_NAME="name_bot"
+# Список ID пользователей Telegram, которым разрешён доступ (в виде JSON-массива)
 TELEGRAM_BOT_ALLOWED_ID="[1234345, 4789456]"
 
 MIKBILL_CABINET_HOST="https://stat.my-domen.ru"
@@ -134,7 +135,7 @@ MIKBILL_PASSWORD=admin
 
 ```
 
-### 3.2 Ключ додатку
+### 3.2 Ключ приложения
 
 ```shell script
 php artisan key:generate
@@ -207,15 +208,25 @@ DB_CONNECTION=mysql
 DB_HOST=mysql
 DB_PORT=3306
 DB_DATABASE=your_db_name
+# DB_USERNAME не должен быть root — MySQL контейнер создаст этого пользователя автоматически
 DB_USERNAME=your_db_user
 DB_PASSWORD=strong_password
 DB_ROOT_PASSWORD=strong_root_password
+
+TELEGRAM_BOT_TOKEN="11111:xxxxxxxxxxxx"
+TELEGRAM_BOT_NAME="name_bot"
+TELEGRAM_BOT_ALLOWED_ID="[1234345, 4789456]"
+
+MIKBILL_HOST="https://admin.my-domen.ru"
+MIKBILL_CABINET_HOST="https://stat.my-domen.ru"
+MIKBILL_LOGIN=admin
+MIKBILL_PASSWORD=admin
 ```
 
 3. Запустить контейнеры:
 
 ```shell script
-docker-compose up -d --build
+docker compose up -d --build
 ```
 
 4. Выполнить инициализацию Laravel:
@@ -235,7 +246,13 @@ docker compose exec app php artisan config:cache
 docker compose exec app php artisan route:cache
 ```
 
-5. Приложение доступно по адресу:
+5. Установить Telegram webhook:
+
+```shell script
+docker compose exec app php artisan telebot:webhook --setup
+```
+
+6. Приложение доступно по адресу:
 
 ```shell script
 http://localhost:8088
@@ -246,5 +263,5 @@ http://localhost:8088
 Остановка:
 
 ```shell script
-docker-compose down
+docker compose down
 ```
