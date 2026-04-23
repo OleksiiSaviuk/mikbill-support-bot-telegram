@@ -53,6 +53,7 @@ return [
 
             'allowed_id' => json_decode(env('TELEGRAM_BOT_ALLOWED_ID', '[]'), true),
             'search_per_page' => env('TELEGRAM_SEARCH_PER_PAGE', 5),
+            'enable_start_phone_search' => env('TELEGRAM_ENABLE_START_PHONE_SEARCH', false),
         ],
 
         // 'second_bot' => [

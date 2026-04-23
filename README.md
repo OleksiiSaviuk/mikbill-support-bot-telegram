@@ -129,6 +129,8 @@ TELEGRAM_BOT_NAME="name_bot"
 TELEGRAM_BOT_ALLOWED_ID="[1234345, 4789456]"
 # Количество результатов поиска абонентов на одной странице (по умолчанию 5)
 TELEGRAM_SEARCH_PER_PAGE=5
+# Включает автопоиск по номеру из /start payload вида phone_380971234567
+TELEGRAM_ENABLE_START_PHONE_SEARCH=false
 
 MIKBILL_CABINET_HOST="https://stat.my-domen.ru"
 MIKBILL_HOST="https://admin.my-domen.ru"
@@ -219,6 +221,7 @@ TELEGRAM_BOT_TOKEN="11111:xxxxxxxxxxxx"
 TELEGRAM_BOT_NAME="name_bot"
 TELEGRAM_BOT_ALLOWED_ID="[1234345, 4789456]"
 TELEGRAM_SEARCH_PER_PAGE=5
+TELEGRAM_ENABLE_START_PHONE_SEARCH=false
 
 MIKBILL_HOST="https://admin.my-domen.ru"
 MIKBILL_CABINET_HOST="https://stat.my-domen.ru"

@@ -35,6 +35,15 @@ class StartCommand extends Command
                 'parse_mode' => 'HTML'
             ]);
 
+            $phone = $this->getPhoneFromStartPayload();
+
+            if (config('telebot.bots.bot.enable_start_phone_search', false) && !empty($phone)) {
+                $this->setLastAction('menuSearchByPhone');
+                $this->performUserSearch('phone', $phone);
+
+                return;
+            }
+
             $this->setLastAction('menuMain');
 
             $this->sendMessage([
@@ -64,5 +73,24 @@ class StartCommand extends Command
                 'parse_mode' => 'HTML'
             ]);
         }
+    }
+
+    private function getPhoneFromStartPayload(): ?string
+    {
+        $text = trim($this->update->message->text ?? '');
+
+        if ($text === '') {
+            return null;
+        }
+
+        $parts = preg_split('/\s+/', $text, 2);
+
+        if (count($parts) < 2 || strpos($parts[1], 'phone_') !== 0) {
+            return null;
+        }
+
+        $phone = preg_replace('/\D+/', '', substr($parts[1], 6));
+
+        return $phone !== '' ? $phone : null;
     }
 }
