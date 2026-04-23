@@ -447,6 +447,43 @@ class CallBackCommand extends Command
                             "text"          => trans("menu_locale"),
                             "callback_data" => "menuLocale"
                         ]
+                    ],
+                    [
+                        [
+                            "text"          => trans("menu_clear_history"),
+                            "callback_data" => "menuClearHistory"
+                        ]
+                    ]
+                ]
+            ]
+        ]);
+    }
+
+    private function menuClearHistory($param)
+    {
+        $this->clearUserState();
+        $this->setLastAction('menuMain');
+
+        $this->sendMessage([
+            'text'         => trans("history_cleared"),
+            'parse_mode'   => 'HTML',
+            'reply_markup' => [
+                'inline_keyboard' => [
+                    [
+                        [
+                            "text"          => trans("menu_search"),
+                            "callback_data" => "menuSearch"
+                        ],
+                        [
+                            "text"          => trans("menu_locale"),
+                            "callback_data" => "menuLocale"
+                        ]
+                    ],
+                    [
+                        [
+                            "text"          => trans("menu_clear_history"),
+                            "callback_data" => "menuClearHistory"
+                        ]
                     ]
                 ]
             ]

@@ -67,6 +67,14 @@ abstract class Command extends CommandHandler
         return $locale;
     }
 
+    public function clearUserState(): void
+    {
+        Cache::forget($this->user_id . '_last_action');
+        Cache::forget($this->user_id . '_search_state');
+        Cache::forget($this->user_id . '_start_phone_lock');
+        Cache::forget($this->user_id . '_last_start_phone');
+    }
+
     protected function formatMoney($value): string
     {
         return number_format((float)$value, 2, '.', '');

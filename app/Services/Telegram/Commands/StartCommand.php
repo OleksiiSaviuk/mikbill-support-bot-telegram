@@ -70,6 +70,12 @@ class StartCommand extends Command
                                 "text"          => trans("menu_locale"),
                                 "callback_data" => "menuLocale"
                             ]
+                        ],
+                        [
+                            [
+                                "text"          => trans("menu_clear_history"),
+                                "callback_data" => "menuClearHistory"
+                            ]
                         ]
                     ]
                 ]
