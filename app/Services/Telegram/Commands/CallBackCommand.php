@@ -461,13 +461,6 @@ class CallBackCommand extends Command
 
     private function menuClearHistory($param)
     {
-        $this->clearUserState();
-        $this->setLastAction('menuMain');
-
-        $fromMessageId = (int)($this->update->callback_query->message->message_id ?? 0);
-        $deleteLimit = (int)config('telebot.bots.bot.clear_history_limit', 0);
-        $this->clearChatHistoryFromMessage($fromMessageId, $deleteLimit);
-
         try {
             $this->bot->answerCallbackQuery([
                 'callback_query_id' => $this->update->callback_query->id,
@@ -476,6 +469,46 @@ class CallBackCommand extends Command
         } catch (\Throwable $e) {
             // Ignore callback answer errors after cleanup.
         }
+
+        $this->clearUserState();
+        $chatId = (int)$this->resolveChatId();
+
+        if ($chatId > 0) {
+            $this->clearTrackedChatHistory($chatId);
+        }
+
+        $fromMessageId = (int)($this->update->callback_query->message->message_id ?? 0);
+        $deleteLimit = (int)config('telebot.bots.bot.clear_history_limit', 0);
+
+        if ($deleteLimit > 0) {
+            $this->clearChatHistoryFromMessage($fromMessageId, $deleteLimit);
+        }
+
+        $this->setLastAction('menuMain');
+        $this->sendMessage([
+            'text'         => "<b>" . trans("history_cleared") . "</b>",
+            'parse_mode'   => 'HTML',
+            'reply_markup' => [
+                'inline_keyboard' => [
+                    [
+                        [
+                            "text"          => trans("menu_search"),
+                            "callback_data" => "menuSearch"
+                        ],
+                        [
+                            "text"          => trans("menu_locale"),
+                            "callback_data" => "menuLocale"
+                        ]
+                    ],
+                    [
+                        [
+                            "text"          => trans("menu_clear_history"),
+                            "callback_data" => "menuClearHistory"
+                        ]
+                    ]
+                ]
+            ]
+        ]);
     }
 
     private function menuLocale()

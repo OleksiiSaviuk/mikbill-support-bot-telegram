@@ -128,6 +128,61 @@ abstract class Command extends CommandHandler
         Cache::forget($this->getTrackedChatMessagesKey((int)$chatId));
     }
 
+    protected function clearTrackedChatHistory(int $chatId, array $excludeMessageIds = []): int
+    {
+        if ($chatId <= 0) {
+            return 0;
+        }
+
+        $key = $this->getTrackedChatMessagesKey($chatId);
+        $history = Cache::get($key, []);
+
+        if (!is_array($history) || empty($history)) {
+            return 0;
+        }
+
+        $excluded = [];
+        foreach ($excludeMessageIds as $messageId) {
+            $id = (int)$messageId;
+            if ($id > 0) {
+                $excluded[$id] = true;
+            }
+        }
+
+        krsort($history, SORT_NUMERIC);
+        $deletedCount = 0;
+
+        foreach (array_keys($history) as $messageId) {
+            $messageId = (int)$messageId;
+
+            if ($messageId <= 0 || isset($excluded[$messageId])) {
+                continue;
+            }
+
+            try {
+                $this->bot->deleteMessage([
+                    'chat_id'    => $chatId,
+                    'message_id' => $messageId,
+                ]);
+            } catch (\Throwable $e) {
+                // Continue to remove tracked history even if Telegram rejects some IDs.
+            }
+
+            unset($history[$messageId]);
+            $deletedCount++;
+        }
+
+        if (empty($history)) {
+            Cache::forget($key);
+            return $deletedCount;
+        }
+
+        $retentionDays = max(7, (int)config('telebot.bots.bot.history_retention_days', 7));
+        Cache::put($key, $history, now()->addDays($retentionDays + 2));
+
+        return $deletedCount;
+    }
+
     protected function trackCurrentUpdateMessage(): void
     {
         if (isset($this->update->message->chat->id, $this->update->message->message_id)) {
