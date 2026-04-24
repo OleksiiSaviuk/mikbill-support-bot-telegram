@@ -161,6 +161,7 @@ class API
                 $this->findByKeyRecursive($row, ['olt_ip', 'ip', 'host_ip']),
             ])),
             '_raw' => $row,
+            '_raw_response' => $response,
         ];
     }
 
@@ -183,6 +184,7 @@ class API
     {
         $normalizedClientMac = $this->normalize_mac($client_mac);
         $rawSearch = isset($search['_raw']) && is_array($search['_raw']) ? $search['_raw'] : $search;
+        $rawSearchResponse = isset($search['_raw_response']) && is_array($search['_raw_response']) ? $search['_raw_response'] : [];
         $rowDiag = $this->pickFirstRow($diag);
         $diagRoot = is_array($rowDiag) ? $rowDiag : $diag;
 
@@ -202,8 +204,10 @@ class API
         ]));
 
         $description = $this->stringOrNull($this->firstNotEmpty([
-            $this->findByKeyRecursive($diagRoot, ['onu_description', 'description', 'desc', 'comment']),
-            $this->findByKeyRecursive($rawSearch, ['onu_description', 'description', 'desc', 'comment']),
+            $this->getByPath($diag, ['data', 'interface', 'description']),
+            $this->getByPath($diag, ['data', 'description']),
+            $this->getByPath($rawSearchResponse, ['data', 'description']),
+            $this->findByKeyRecursive($rawSearch, ['description', 'desc', 'comment']),
         ]));
 
         $vendor = $this->stringOrNull($this->firstNotEmpty([
@@ -362,6 +366,21 @@ class API
         }
 
         return !empty($payload);
+    }
+
+    private function getByPath(array $payload, array $path)
+    {
+        $cursor = $payload;
+
+        foreach ($path as $segment) {
+            if (!is_array($cursor) || !array_key_exists($segment, $cursor)) {
+                return null;
+            }
+
+            $cursor = $cursor[$segment];
+        }
+
+        return $cursor;
     }
 
     private function normalizeUniPorts($value): ?string
