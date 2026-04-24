@@ -635,19 +635,7 @@ abstract class Command extends CommandHandler
                 return null;
             }
 
-            $search = $wildcoreApi->search_onu_by_client_mac($clientMac);
-
-            if (empty($search) || (string)($search['interface_id'] ?? '') !== (string)$interfaceId) {
-                return null;
-            }
-
-            $diag = $wildcoreApi->get_onu_diagnostic($interfaceId, $source);
-
-            if (!is_array($diag)) {
-                return null;
-            }
-
-            return $wildcoreApi->parse_onu_info($search, $diag, $clientMac);
+            return $wildcoreApi->get_connection_by_interface_and_client_mac($interfaceId, $clientMac, $source);
         } catch (\Throwable $e) {
             Log::warning('Wildcore ONU refresh failed', [
                 'message' => $e->getMessage(),
@@ -664,60 +652,62 @@ abstract class Command extends CommandHandler
             return '';
         }
 
+        $connectionType = (string)($onu['connection_type'] ?? 'onu');
+
+        if ($connectionType === 'switch_port') {
+            return $this->buildSwitchPortMessageBlock($onu);
+        }
+
+        if ($connectionType === 'unknown') {
+            return $this->buildUnknownConnectionMessageBlock($onu);
+        }
+
         $lines = [];
+        $location = $this->buildLocationLine($onu['olt_name'] ?? null, $onu['interface_name'] ?? null);
+        $lanStatus = $this->resolveLanStatus($onu['uni_ports'] ?? null, $onu['status'] ?? null);
+        $macState = $this->resolveMacPresenceText($onu['client_mac_found_in_fdb'] ?? null);
+        $lastDown = $this->formatOnuEventTime($onu['last_dereg'] ?? null);
+        $lastUp = $this->formatOnuEventTime($onu['last_reg'] ?? null);
 
         $lines[] = '';
-        $lines[] = '📡 <b>' . $this->escapeHtml(trans('onu_block_title')) . '</b>';
-        $this->addOnuLine($lines, trans('onu_label_status'), $onu['status'] ?? null);
-        $this->addOnuLine(
-            $lines,
-            trans('onu_label_olt'),
-            trim((string)($onu['olt_name'] ?? '')) . ((empty($onu['olt_ip']) || empty($onu['olt_name'])) ? '' : ' / ') . trim((string)($onu['olt_ip'] ?? ''))
-        );
-        $this->addOnuLine($lines, trans('onu_label_port'), $onu['interface_name'] ?? null);
-        $this->addOnuLine($lines, trans('onu_label_onu'), $onu['onu_ident'] ?? null);
-        $this->addOnuLine($lines, trans('onu_label_description'), $onu['description'] ?? null);
+        $lines[] = '📡 <b>ONU</b>';
+        $this->addPlainLine($lines, 'Статус', $onu['status'] ?? null);
+        $this->addPlainLine($lines, 'RX', $this->formatOnuMetric($onu['rx'] ?? null, ' dBm'));
+        $this->addPlainLine($lines, 'Причина', $onu['last_down_reason'] ?? null);
 
-        $opticLines = [];
-        $this->addOnuLine($opticLines, trans('onu_label_rx_onu'), $this->formatOnuMetric($onu['rx'] ?? null, ' dBm'));
-        $this->addOnuLine($opticLines, trans('onu_label_rx_olt'), $this->formatOnuMetric($onu['olt_rx'] ?? null, ' dBm'));
-        $this->addOnuLine($opticLines, trans('onu_label_tx_onu'), $this->formatOnuMetric($onu['tx'] ?? null, ' dBm'));
-
-        if (!empty($opticLines)) {
+        if ($lastDown !== null || $lastUp !== null) {
             $lines[] = '';
-            $lines[] = '🔦 <b>' . $this->escapeHtml(trans('onu_optics_title')) . '</b>';
-            $lines = array_merge($lines, $opticLines);
+            if ($lastDown !== null) {
+                $lines[] = '🕓 ' . $this->escapeHtml($lastDown) . ' → падіння';
+            }
+            if ($lastUp !== null) {
+                $lines[] = '🕓 ' . $this->escapeHtml($lastUp) . ' → піднялась';
+            }
         }
 
-        $eventLines = [];
-        $this->addOnuLine($eventLines, trans('onu_label_last_reg'), $onu['last_reg'] ?? null);
-        $this->addOnuLine($eventLines, trans('onu_label_last_dereg'), $onu['last_dereg'] ?? null);
-        $this->addOnuLine($eventLines, trans('onu_label_reason'), $onu['last_down_reason'] ?? null);
+        $lines[] = '';
+        $lines[] = '🔌 LAN: ' . $this->escapeHtml($lanStatus ?? '-');
+        $lines[] = 'MAC: ' . $this->escapeHtml($macState ?? '-');
 
-        if (!empty($eventLines)) {
+        if ($location !== null || !empty($onu['description'])) {
             $lines[] = '';
-            $lines[] = '🕓 <b>' . $this->escapeHtml(trans('onu_events_title')) . '</b>';
-            $lines = array_merge($lines, $eventLines);
+            if ($location !== null) {
+                $lines[] = '📍 ' . $this->escapeHtml($location);
+            }
+            $this->addPlainLine($lines, 'Опис', $onu['description'] ?? null);
         }
 
-        $lanLines = [];
-        $this->addOnuLine($lanLines, trans('onu_label_uni'), $onu['uni_ports'] ?? null);
-        $this->addOnuLine($lanLines, trans('onu_label_mac_fdb'), $this->formatOnuFdbFlag($onu['client_mac_found_in_fdb'] ?? null));
-        $this->addOnuLine($lanLines, trans('onu_label_vlan'), $onu['vlan'] ?? null);
-
-        if (!empty($lanLines)) {
-            $lines[] = '';
-            $lines[] = '🔌 <b>' . $this->escapeHtml(trans('onu_lan_title')) . '</b>';
-            $lines = array_merge($lines, $lanLines);
-        }
-
-        $this->addOnuLine($lines, trans('onu_label_summary'), $onu['summary'] ?? null);
+        $this->addPlainLine($lines, 'Висновок', $onu['summary'] ?? null);
 
         return implode("\n", $lines) . "\n";
     }
 
     protected function buildOnuRefreshButtonRow(?array $onu): array
     {
+        if (empty($onu) || !WildcoreAPI::wildcore_enabled()) {
+            return [];
+        }
+
         $interfaceId = (string)($onu['interface_id'] ?? '');
         $clientMac = (string)($onu['client_mac'] ?? '');
 
@@ -727,28 +717,186 @@ abstract class Command extends CommandHandler
 
         return [
             [
-                'text' => trans('onu_refresh_button'),
-                'callback_data' => 'refresh_onu:' . $interfaceId . ':' . $clientMac,
+                'text' => trans('wildcore_refresh_button'),
+                'callback_data' => 'refresh_wc:' . $interfaceId . ':' . $clientMac,
             ]
         ];
     }
 
+    protected function buildSwitchPortMessageBlock(array $data): string
+    {
+        $lines = [];
+        $location = $this->buildLocationLine($data['device_name'] ?? null, $data['interface_name'] ?? $data['name'] ?? null);
+        $lanStatus = $this->resolveLanStatus($data['status'] ?? null, $data['status'] ?? null);
+        $macState = !empty($data['client_mac']) ? 'знайдено' : null;
+        $summary = !empty($data['status'])
+            ? ('статус порту: ' . (string)$data['status'])
+            : 'MAC знайдено на порті доступу';
+
+        $lines[] = '';
+        $lines[] = '🔌 <b>Порт доступу</b>';
+        $this->addPlainLine($lines, 'Статус порту', $data['status'] ?? null);
+        $this->addPlainLine($lines, 'Тип', $data['interface_type'] ?? null);
+
+        $lines[] = '';
+        $lines[] = '🔌 LAN: ' . $this->escapeHtml($lanStatus ?? '-');
+        $lines[] = 'MAC: ' . $this->escapeHtml($macState ?? '-');
+
+        if ($location !== null || !empty($data['description'])) {
+            $lines[] = '';
+            if ($location !== null) {
+                $lines[] = '📍 ' . $this->escapeHtml($location);
+            }
+            $this->addPlainLine($lines, 'Опис', $data['description'] ?? null);
+        }
+
+        $this->addPlainLine($lines, 'Висновок', $summary);
+
+        return implode("\n", $lines) . "\n";
+    }
+
+    protected function buildUnknownConnectionMessageBlock(array $data): string
+    {
+        $lines = [];
+        $location = $this->buildLocationLine($data['device_name'] ?? null, $data['interface_name'] ?? $data['name'] ?? null);
+        $summary = !empty($data['interface_type'])
+            ? ('тип: ' . (string)$data['interface_type'])
+            : 'тип підключення не визначено';
+
+        $lines[] = '';
+        $lines[] = '🔎 <b>MAC знайдено</b>';
+        $this->addPlainLine($lines, 'Тип', $data['interface_type'] ?? null);
+
+        $lines[] = '';
+        $lines[] = '🔌 LAN: -';
+        $lines[] = 'MAC: знайдено';
+
+        if ($location !== null || !empty($data['description'])) {
+            $lines[] = '';
+            if ($location !== null) {
+                $lines[] = '📍 ' . $this->escapeHtml($location);
+            }
+            $this->addPlainLine($lines, 'Опис', $data['description'] ?? null);
+        }
+
+        $this->addPlainLine($lines, 'Висновок', $summary);
+
+        return implode("\n", $lines) . "\n";
+    }
+
+    protected function addPlainLine(array &$lines, string $label, $value): void
+    {
+        if ($value === null) {
+            return;
+        }
+
+        $text = trim((string)$value);
+
+        if ($text === '') {
+            return;
+        }
+
+        $lines[] = $label . ': ' . $this->escapeHtml($text);
+    }
+
+    protected function buildLocationLine($deviceName, $interfaceName): ?string
+    {
+        $device = trim((string)$deviceName);
+        $iface = trim((string)$interfaceName);
+
+        if ($device !== '' && $iface !== '') {
+            return $device . ' / ' . $iface;
+        }
+
+        if ($device !== '') {
+            return $device;
+        }
+
+        if ($iface !== '') {
+            return $iface;
+        }
+
+        return null;
+    }
+
+    protected function resolveLanStatus($primary, $fallback = null): ?string
+    {
+        $value = strtolower(trim((string)($primary ?? '')));
+        if ($value === '' && $fallback !== null) {
+            $value = strtolower(trim((string)$fallback));
+        }
+
+        if ($value === '') {
+            return null;
+        }
+
+        if (strpos($value, 'up') !== false || strpos($value, 'online') !== false || strpos($value, 'active') !== false) {
+            return 'up';
+        }
+
+        if (strpos($value, 'down') !== false || strpos($value, 'offline') !== false || strpos($value, 'inactive') !== false) {
+            return 'down';
+        }
+
+        return $value;
+    }
+
+    protected function resolveMacPresenceText($flag): ?string
+    {
+        if ($flag === true) {
+            return 'знайдено';
+        }
+
+        if ($flag === false) {
+            return 'не знайдено';
+        }
+
+        return null;
+    }
+
+    protected function formatOnuEventTime($value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $raw = trim((string)$value);
+        if ($raw === '') {
+            return null;
+        }
+
+        $timestamp = strtotime($raw);
+
+        if ($timestamp === false) {
+            return $raw;
+        }
+
+        return date('d.m.y H:i', $timestamp);
+    }
+
     protected function replaceOnuBlock(string $messageText, string $onuBlock): string
     {
-        $markerHtml = "\n📡 <b>" . $this->escapeHtml(trans('onu_block_title')) . "</b>";
-        $position = strpos($messageText, $markerHtml);
+        $position = false;
+        $markers = [
+            "\n📡 <b>" . $this->escapeHtml(trans('onu_block_title')) . "</b>",
+            "\n📡 " . trans('onu_block_title'),
+            "\n🔌 <b>" . $this->escapeHtml(trans('access_port_block_title')) . "</b>",
+            "\n🔌 " . trans('access_port_block_title'),
+            "\n🔎 <b>" . $this->escapeHtml(trans('mac_found_block_title')) . "</b>",
+            "\n🔎 " . trans('mac_found_block_title'),
+            "\n📡 <b>ONU / ONT</b>",
+            "\n📡 ONU / ONT",
+            "\n🔌 <b>Порт доступу</b>",
+            "\n🔌 Порт доступу",
+            "\n🔎 <b>MAC знайдено</b>",
+            "\n🔎 MAC знайдено",
+        ];
 
-        if ($position === false) {
-            $markerPlain = "\n📡 " . trans('onu_block_title');
-            $position = strpos($messageText, $markerPlain);
-        }
-
-        if ($position === false) {
-            $position = strpos($messageText, "\n📡 <b>ONU / ONT</b>");
-        }
-
-        if ($position === false) {
-            $position = strpos($messageText, "\n📡 ONU / ONT");
+        foreach ($markers as $marker) {
+            $found = strpos($messageText, $marker);
+            if ($found !== false && ($position === false || $found < $position)) {
+                $position = $found;
+            }
         }
 
         if ($position === false) {

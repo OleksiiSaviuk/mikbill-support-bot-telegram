@@ -113,56 +113,86 @@ class API
             return null;
         }
 
-        $response = $this->wildcore_request('GET', '/api/v1/device-interface/search', [
-            'mac_address' => $normalizedMac,
-            'only_active_mac' => 1,
-        ]);
+        $candidates = $this->searchCandidatesByClientMac($normalizedMac);
 
-        // Fallback for offline ONU: search again without active-MAC restriction.
-        if (!is_array($response) || !$this->hasAnyRows($response)) {
-            $response = $this->wildcore_request('GET', '/api/v1/device-interface/search', [
-                'mac_address' => $normalizedMac,
-            ]);
-        }
-
-        if (!is_array($response)) {
+        if (empty($candidates)) {
             return null;
         }
 
-        $row = $this->pickFirstRow($response);
+        usort($candidates, function (array $a, array $b) {
+            $priorityCompare = ($b['_priority'] ?? 0) <=> ($a['_priority'] ?? 0);
+            if ($priorityCompare !== 0) {
+                return $priorityCompare;
+            }
 
-        if (!is_array($row)) {
+            return 0;
+        });
+
+        $selected = $candidates[0];
+        $selected['matches_count'] = count($candidates);
+        unset($selected['_priority']);
+
+        return $selected;
+    }
+
+    public function get_connection_by_interface_and_client_mac($interfaceId, $clientMac, string $diagSource = 'cache'): ?array
+    {
+        $normalizedMac = $this->normalize_mac((string)$clientMac);
+        $interfaceId = trim((string)$interfaceId);
+
+        if ($normalizedMac === null || $interfaceId === '') {
             return null;
         }
 
-        $interfaceId = $this->firstNotEmpty([
-            $row['interface_id'] ?? null,
-            $row['id'] ?? null,
-            $this->findByKeyRecursive($row, ['interface_id', 'id']),
-        ]);
+        $candidates = $this->searchCandidatesByClientMac($normalizedMac);
 
-        if (empty($interfaceId)) {
+        if (empty($candidates)) {
             return null;
         }
 
-        return [
-            'interface_id' => (string)$interfaceId,
-            'interface_name' => $this->stringOrNull($this->firstNotEmpty([
-                $row['interface_name'] ?? null,
-                $row['name'] ?? null,
-                $this->findByKeyRecursive($row, ['interface_name', 'name', 'port_name']),
-            ])),
-            'olt_name' => $this->stringOrNull($this->firstNotEmpty([
-                $row['olt_name'] ?? null,
-                $this->findByKeyRecursive($row, ['olt_name', 'device_name', 'host_name']),
-            ])),
-            'olt_ip' => $this->stringOrNull($this->firstNotEmpty([
-                $row['olt_ip'] ?? null,
-                $this->findByKeyRecursive($row, ['olt_ip', 'ip', 'host_ip']),
-            ])),
-            '_raw' => $row,
-            '_raw_response' => $response,
-        ];
+        $selected = null;
+        foreach ($candidates as $candidate) {
+            if ((string)($candidate['interface_id'] ?? '') === $interfaceId) {
+                $selected = $candidate;
+                break;
+            }
+        }
+
+        if ($selected === null) {
+            return null;
+        }
+
+        $selected['matches_count'] = count($candidates);
+        unset($selected['_priority']);
+
+        if (($selected['connection_type'] ?? 'unknown') !== 'onu') {
+            return [
+                'connection_type' => (string)$selected['connection_type'],
+                'matches_count' => (int)($selected['matches_count'] ?? 1),
+                'interface_id' => $selected['interface_id'] ?? null,
+                'interface_name' => $selected['name'] ?? null,
+                'interface_type' => $selected['interface_type'] ?? null,
+                'status' => $selected['status'] ?? null,
+                'description' => $selected['description'] ?? null,
+                'client_mac' => $normalizedMac,
+                'device_name' => $selected['device_name'] ?? null,
+                'device_ip' => $selected['device_ip'] ?? null,
+                'device_description' => $selected['device_description'] ?? null,
+                'device_vendor' => $selected['device_vendor'] ?? null,
+                'device_model' => $selected['device_model'] ?? null,
+                'device_model_type' => $selected['device_model_type'] ?? null,
+                'parent_bind_key' => $selected['parent_bind_key'] ?? null,
+                'bind_key' => $selected['bind_key'] ?? null,
+            ];
+        }
+
+        $diag = $this->get_onu_diagnostic($interfaceId, $diagSource === 'device' ? 'device' : 'cache');
+
+        if (!is_array($diag)) {
+            return null;
+        }
+
+        return $this->parse_onu_info($selected, $diag, $normalizedMac);
     }
 
     public function get_onu_diagnostic($interface_id, string $source = 'cache'): ?array
@@ -183,46 +213,44 @@ class API
     public function parse_onu_info(array $search, array $diag, string $client_mac): array
     {
         $normalizedClientMac = $this->normalize_mac($client_mac);
-        $rawSearch = isset($search['_raw']) && is_array($search['_raw']) ? $search['_raw'] : $search;
-        $rawSearchResponse = isset($search['_raw_response']) && is_array($search['_raw_response']) ? $search['_raw_response'] : [];
         $rowDiag = $this->pickFirstRow($diag);
         $diagRoot = is_array($rowDiag) ? $rowDiag : $diag;
 
         $status = strtolower((string)$this->firstNotEmpty([
             $this->findByKeyRecursive($diagRoot, ['status', 'onu_status', 'oper_status', 'state']),
-            $this->findByKeyRecursive($rawSearch, ['status', 'state']),
+            $search['status'] ?? null,
         ]));
 
         $adminStatus = $this->stringOrNull($this->firstNotEmpty([
             $this->findByKeyRecursive($diagRoot, ['admin_status', 'admin_state']),
-            $this->findByKeyRecursive($rawSearch, ['admin_status', 'admin_state']),
+            $search['admin_status'] ?? null,
         ]));
 
         $onuIdent = $this->stringOrNull($this->firstNotEmpty([
             $this->findByKeyRecursive($diagRoot, ['onu_ident', 'serial', 'serial_number', 'sn']),
-            $this->findByKeyRecursive($rawSearch, ['onu_ident', 'serial', 'serial_number', 'sn']),
+            $search['onu_ident'] ?? null,
         ]));
 
         $description = $this->stringOrNull($this->firstNotEmpty([
-            $this->getByPath($diag, ['data', 'interface', 'description']),
-            $this->getByPath($diag, ['data', 'description']),
-            $this->getByPath($rawSearchResponse, ['data', 'description']),
-            $this->findByKeyRecursive($rawSearch, ['description', 'desc', 'comment']),
+            $search['interface_description'] ?? null,
+            $search['interface_comment'] ?? null,
+            $this->getByPath($diag, ['data', 'iface', 'description']),
+            $search['device_description'] ?? null,
         ]));
 
         $vendor = $this->stringOrNull($this->firstNotEmpty([
             $this->findByKeyRecursive($diagRoot, ['vendor', 'onu_vendor']),
-            $this->findByKeyRecursive($rawSearch, ['vendor', 'onu_vendor']),
+            $search['device_vendor'] ?? null,
         ]));
 
         $model = $this->stringOrNull($this->firstNotEmpty([
             $this->findByKeyRecursive($diagRoot, ['model', 'onu_model']),
-            $this->findByKeyRecursive($rawSearch, ['model', 'onu_model']),
+            $search['device_model'] ?? null,
         ]));
 
         $uniPorts = $this->normalizeUniPorts($this->firstNotEmpty([
             $this->findByKeyRecursive($diagRoot, ['uni_ports', 'uni', 'uni_status']),
-            $this->findByKeyRecursive($rawSearch, ['uni_ports', 'uni', 'uni_status']),
+            $search['uni_ports'] ?? null,
         ]));
 
         $fdbMacs = $this->extractMacList($this->findByKeyRecursive($diagRoot, ['fdb_macs', 'fdb', 'mac_table', 'client_macs']));
@@ -234,9 +262,12 @@ class API
 
         $onu = [
             'interface_id' => (string)$search['interface_id'],
-            'interface_name' => $search['interface_name'] ?? null,
-            'olt_name' => $search['olt_name'] ?? null,
-            'olt_ip' => $search['olt_ip'] ?? null,
+            'interface_name' => $search['name'] ?? ($search['interface_name'] ?? null),
+            'olt_name' => $search['device_name'] ?? null,
+            'olt_ip' => $search['device_ip'] ?? null,
+            'interface_type' => $search['interface_type'] ?? null,
+            'connection_type' => 'onu',
+            'matches_count' => (int)($search['matches_count'] ?? 1),
 
             'status' => $status !== '' ? $status : null,
             'admin_status' => $adminStatus,
@@ -260,7 +291,7 @@ class API
             'client_mac_found_in_fdb' => $clientMacFoundInFdb,
             'vlan' => $this->stringOrNull($this->firstNotEmpty([
                 $this->findByKeyRecursive($diagRoot, ['vlan', 'client_vlan']),
-                $this->findByKeyRecursive($rawSearch, ['vlan', 'client_vlan']),
+                $search['vlan'] ?? null,
             ])),
             'client_mac' => $normalizedClientMac,
         ];
@@ -288,13 +319,135 @@ class API
             return null;
         }
 
-        $diag = $this->get_onu_diagnostic($search['interface_id'], 'cache');
+        return $this->get_connection_by_interface_and_client_mac($search['interface_id'], $normalizedMac, 'cache');
+    }
 
-        if (!is_array($diag)) {
+    private function searchCandidatesByClientMac(string $normalizedMac): array
+    {
+        $activeResponse = $this->wildcore_request('GET', '/api/v1/device-interface/search', [
+            'mac_address' => $normalizedMac,
+            'only_active_mac' => 1,
+        ]);
+
+        $rows = [];
+
+        if (is_array($activeResponse) && $this->hasAnyRows($activeResponse)) {
+            $rows = $this->extractRows($activeResponse);
+        } else {
+            $fallbackResponse = $this->wildcore_request('GET', '/api/v1/device-interface/search', [
+                'mac_address' => $normalizedMac,
+            ]);
+
+            if (is_array($fallbackResponse) && $this->hasAnyRows($fallbackResponse)) {
+                $rows = $this->extractRows($fallbackResponse);
+            }
+        }
+
+        if (empty($rows)) {
+            return [];
+        }
+
+        $candidates = [];
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $candidate = $this->normalizeCandidate($row, $normalizedMac);
+            if ($candidate !== null) {
+                $candidates[] = $candidate;
+            }
+        }
+
+        return $candidates;
+    }
+
+    private function normalizeCandidate(array $row, string $normalizedMac): ?array
+    {
+        $interfaceId = $this->stringOrNull($this->firstNotEmpty([
+            $row['interface_id'] ?? null,
+            $row['id'] ?? null,
+            $row['bind_key'] ?? null,
+        ]));
+
+        if ($interfaceId === null) {
             return null;
         }
 
-        return $this->parse_onu_info($search, $diag, $normalizedMac);
+        $interfaceType = $this->stringOrNull($row['type'] ?? null);
+        $interfaceName = $this->stringOrNull($this->firstNotEmpty([
+            $row['name'] ?? null,
+            $row['interface_name'] ?? null,
+        ]));
+
+        $deviceName = $this->stringOrNull($this->getByPath($row, ['device', 'name']));
+        $deviceIp = $this->stringOrNull($this->getByPath($row, ['device', 'ip']));
+        $deviceDescription = $this->stringOrNull($this->getByPath($row, ['device', 'description']));
+        $deviceVendor = $this->stringOrNull($this->getByPath($row, ['device', 'model', 'vendor']));
+        $deviceModel = $this->stringOrNull($this->getByPath($row, ['device', 'model', 'model']));
+        $deviceModelType = $this->stringOrNull($this->getByPath($row, ['device', 'model', 'type']));
+
+        $connectionType = $this->detectConnectionType($interfaceType, $interfaceName);
+
+        return [
+            'interface_id' => $interfaceId,
+            'connection_type' => $connectionType,
+            '_priority' => $this->connectionPriority($connectionType),
+            'interface_type' => $interfaceType,
+            'name' => $interfaceName,
+            'status' => $this->stringOrNull($row['status'] ?? null),
+            'description' => $this->stringOrNull($this->firstNotEmpty([
+                $row['description'] ?? null,
+                $row['comment'] ?? null,
+                $deviceDescription,
+            ])),
+            'interface_description' => $this->stringOrNull($row['description'] ?? null),
+            'interface_comment' => $this->stringOrNull($row['comment'] ?? null),
+            'device_name' => $deviceName,
+            'device_ip' => $deviceIp,
+            'device_description' => $deviceDescription,
+            'device_vendor' => $deviceVendor,
+            'device_model' => $deviceModel,
+            'device_model_type' => $deviceModelType,
+            'parent_bind_key' => $this->stringOrNull($row['parent_bind_key'] ?? null),
+            'bind_key' => $this->stringOrNull($row['bind_key'] ?? null),
+            'client_mac' => $normalizedMac,
+            '_raw' => $row,
+        ];
+    }
+
+    private function detectConnectionType(?string $type, ?string $name): string
+    {
+        $typeLower = strtolower((string)$type);
+        $nameLower = strtolower((string)$name);
+
+        if (in_array(strtoupper((string)$type), ['ONU', 'ONT', 'PON_ONU'], true)
+            || preg_match('/\b(onu|ont|gpon|epon)\b/i', $typeLower)
+            || preg_match('/\b(onu|ont|gpon|epon)\b/i', $nameLower)) {
+            return 'onu';
+        }
+
+        if (strpos($typeLower, 'ethernet') !== false
+            || strpos($typeLower, 'switch') !== false
+            || strpos($typeLower, 'access') !== false
+            || preg_match('/\b(gi|ge|eth|fa|te)\S*/i', $nameLower)) {
+            return 'switch_port';
+        }
+
+        return 'unknown';
+    }
+
+    private function connectionPriority(string $type): int
+    {
+        if ($type === 'onu') {
+            return 3;
+        }
+
+        if ($type === 'switch_port') {
+            return 2;
+        }
+
+        return 1;
     }
 
     public function build_onu_diagnostic_summary(array $onu): string
@@ -381,6 +534,23 @@ class API
         }
 
         return $cursor;
+    }
+
+    private function extractRows(array $payload): array
+    {
+        if (isset($payload['data']) && is_array($payload['data'])) {
+            if ($this->isAssoc($payload['data'])) {
+                return [$payload['data']];
+            }
+
+            return $payload['data'];
+        }
+
+        if ($this->isAssoc($payload)) {
+            return [$payload];
+        }
+
+        return $payload;
     }
 
     private function normalizeUniPorts($value): ?string

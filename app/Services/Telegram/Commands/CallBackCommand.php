@@ -29,7 +29,7 @@ class CallBackCommand extends Command
     {
         $callbackData = (string)($this->update->callback_query->data ?? '');
 
-        if (strpos($callbackData, 'refresh_onu:') === 0) {
+        if (strpos($callbackData, 'refresh_wc:') === 0 || strpos($callbackData, 'refresh_onu:') === 0) {
             $this->refreshOnu($callbackData);
             return;
         }
@@ -53,7 +53,7 @@ class CallBackCommand extends Command
         $parts = explode(':', $callbackData, 3);
 
         if (count($parts) < 3) {
-            $this->answerCallback(trans('onu_refresh_error'));
+            $this->answerCallback(trans('wildcore_refresh_error'));
             return;
         }
 
@@ -61,14 +61,14 @@ class CallBackCommand extends Command
         $clientMac = trim((string)$parts[2]);
 
         if ($interfaceId === '' || $clientMac === '') {
-            $this->answerCallback(trans('onu_refresh_error'));
+            $this->answerCallback(trans('wildcore_refresh_error'));
             return;
         }
 
         $throttleKey = 'onu_refresh_' . $interfaceId;
 
         if (Cache::has($throttleKey)) {
-            $this->answerCallback(trans('onu_refresh_throttled'));
+            $this->answerCallback(trans('wildcore_refresh_throttled'));
             return;
         }
 
@@ -77,14 +77,14 @@ class CallBackCommand extends Command
         $onu = $this->getOnuByInterfaceAndClientMac($interfaceId, $clientMac, 'device');
 
         if (empty($onu)) {
-            $this->answerCallback(trans('onu_refresh_error'));
+            $this->answerCallback(trans('wildcore_refresh_error'));
             return;
         }
 
         $onuBlock = $this->buildOnuMessageBlock($onu);
 
         if ($onuBlock === '') {
-            $this->answerCallback(trans('onu_refresh_error'));
+            $this->answerCallback(trans('wildcore_refresh_error'));
             return;
         }
 
@@ -94,7 +94,7 @@ class CallBackCommand extends Command
         $currentText = isset($message->text) ? (string)$message->text : '';
 
         if ($chatId <= 0 || $messageId <= 0 || $currentText === '') {
-            $this->answerCallback(trans('onu_refresh_error'));
+            $this->answerCallback(trans('wildcore_refresh_error'));
             return;
         }
 
@@ -119,14 +119,14 @@ class CallBackCommand extends Command
 
             $this->bot->editMessageText($editPayload);
 
-            $this->answerCallback(trans('onu_refresh_success'));
+            $this->answerCallback(trans('wildcore_refresh_success'));
         } catch (\Throwable $e) {
             Log::warning('Failed to edit Telegram message during ONU refresh', [
                 'message' => $e->getMessage(),
                 'interface_id' => $interfaceId,
             ]);
 
-            $this->answerCallback(trans('onu_refresh_error'));
+            $this->answerCallback(trans('wildcore_refresh_error'));
         }
     }
 
