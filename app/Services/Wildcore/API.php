@@ -118,6 +118,13 @@ class API
             'only_active_mac' => 1,
         ]);
 
+        // Fallback for offline ONU: search again without active-MAC restriction.
+        if (!is_array($response) || !$this->hasAnyRows($response)) {
+            $response = $this->wildcore_request('GET', '/api/v1/device-interface/search', [
+                'mac_address' => $normalizedMac,
+            ]);
+        }
+
         if (!is_array($response)) {
             return null;
         }
@@ -346,6 +353,15 @@ class API
         }
 
         return null;
+    }
+
+    private function hasAnyRows(array $payload): bool
+    {
+        if (isset($payload['data']) && is_array($payload['data'])) {
+            return !empty($payload['data']);
+        }
+
+        return !empty($payload);
     }
 
     private function normalizeUniPorts($value): ?string
