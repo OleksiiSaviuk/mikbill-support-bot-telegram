@@ -669,20 +669,27 @@ abstract class Command extends CommandHandler
         $lastDown = $this->formatOnuEventTime($onu['last_dereg'] ?? null);
         $lastUp = $this->formatOnuEventTime($onu['last_reg'] ?? null);
 
+        $status = $onu['status'] ?? null;
+        $statusIcon = ($status !== null && stripos($status, 'online') !== false) ? '✅' : '❌';
+
         $lines[] = '';
         $lines[] = '📡 <b>ONU</b>';
-        $this->addPlainLine($lines, 'Статус', $onu['status'] ?? null);
+        if ($status !== null) {
+            $lines[] = trans('onu_label_status') . ': ' . $statusIcon . ' ' . $this->escapeHtml($status);
+        }
         $this->addPlainLine($lines, 'RX', $this->formatOnuMetric($onu['rx'] ?? null, ' dBm'));
-        $this->addPlainLine($lines, 'Причина', $onu['last_down_reason'] ?? null);
 
         if ($lastDown !== null || $lastUp !== null) {
             $lines[] = '';
             if ($lastDown !== null) {
-                $lines[] = '🕓 ' . $this->escapeHtml($lastDown) . ' → падіння';
+                $lines[] = '🕓 ' . $this->escapeHtml($lastDown) . ' ' . trans('onu_event_down');
             }
             if ($lastUp !== null) {
-                $lines[] = '🕓 ' . $this->escapeHtml($lastUp) . ' → піднялась';
+                $lines[] = '🕓 ' . $this->escapeHtml($lastUp) . ' ' . trans('onu_event_up');
             }
+            $this->addPlainLine($lines, trans('onu_label_last_down_reason'), $onu['last_down_reason'] ?? null);
+        } elseif (!empty($onu['last_down_reason'])) {
+            $this->addPlainLine($lines, trans('onu_label_last_down_reason'), $onu['last_down_reason']);
         }
 
         $lines[] = '';
@@ -697,6 +704,7 @@ abstract class Command extends CommandHandler
             $this->addPlainLine($lines, 'Опис', $onu['description'] ?? null);
         }
 
+        $lines[] = '';
         $this->addPlainLine($lines, 'Висновок', $onu['summary'] ?? null);
 
         return implode("\n", $lines) . "\n";

@@ -217,16 +217,19 @@ class API
         $diagRoot = is_array($rowDiag) ? $rowDiag : $diag;
 
         $status = strtolower((string)$this->firstNotEmpty([
-            $this->findByKeyRecursive($diagRoot, ['status', 'onu_status', 'oper_status', 'state']),
-            $search['status'] ?? null,
+            $this->stringOrNull($this->getByPath($diagRoot, ['status', 'online'])),
+            $this->stringOrNull($this->findByKeyRecursive($diagRoot, ['onu_status', 'oper_status'])),
+            $this->stringOrNull($search['status'] ?? null),
         ]));
 
         $adminStatus = $this->stringOrNull($this->firstNotEmpty([
+            $this->getByPath($diagRoot, ['status', 'admin']),
             $this->findByKeyRecursive($diagRoot, ['admin_status', 'admin_state']),
             $search['admin_status'] ?? null,
         ]));
 
         $onuIdent = $this->stringOrNull($this->firstNotEmpty([
+            $this->getByPath($diagRoot, ['ident', 'value']),
             $this->findByKeyRecursive($diagRoot, ['onu_ident', 'serial', 'serial_number', 'sn']),
             $search['onu_ident'] ?? null,
         ]));
@@ -387,7 +390,7 @@ class API
         $deviceModel = $this->stringOrNull($this->getByPath($row, ['device', 'model', 'model']));
         $deviceModelType = $this->stringOrNull($this->getByPath($row, ['device', 'model', 'type']));
 
-        $connectionType = $this->detectConnectionType($interfaceType, $interfaceName);
+        $connectionType = $this->detectConnectionType($interfaceType, $interfaceName, $deviceModelType);
 
         return [
             'interface_id' => $interfaceId,
@@ -416,7 +419,7 @@ class API
         ];
     }
 
-    private function detectConnectionType(?string $type, ?string $name): string
+    private function detectConnectionType(?string $type, ?string $name, ?string $deviceModelType = null): string
     {
         $typeLower = strtolower((string)$type);
         $nameLower = strtolower((string)$name);
@@ -427,10 +430,13 @@ class API
             return 'onu';
         }
 
-        if (strpos($typeLower, 'ethernet') !== false
+        $knownSwitchTypes = ['FE', 'GE', 'GI', 'FA', 'TE', 'XGE', 'SFP', 'ETH', 'PORT', 'ACCESS'];
+        if (in_array(strtoupper((string)$type), $knownSwitchTypes, true)
+            || strpos($typeLower, 'ethernet') !== false
             || strpos($typeLower, 'switch') !== false
             || strpos($typeLower, 'access') !== false
-            || preg_match('/\b(gi|ge|eth|fa|te)\S*/i', $nameLower)) {
+            || preg_match('/\b(gi|ge|eth|fa|te|fe)\S*/i', $nameLower)
+            || strtoupper((string)$deviceModelType) === 'SWITCH') {
             return 'switch_port';
         }
 
