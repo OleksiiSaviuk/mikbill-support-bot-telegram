@@ -594,7 +594,7 @@ abstract class Command extends CommandHandler
         $statusIcon = ($status !== null && stripos($status, 'online') !== false) ? '✅' : '❌';
 
         $lines[] = '';
-            $lines[] = '📡 <b>' . $this->escapeHtml(trans('onu_block_title')) . '</b>';
+            $lines[] = ' <b>' . $this->escapeHtml(trans('onu_block_title')) . '</b>';
         if ($status !== null) {
             $lines[] = trans('onu_label_status') . ': ' . $statusIcon . ' ' . $this->escapeHtml($status);
         }
@@ -603,10 +603,10 @@ abstract class Command extends CommandHandler
         if ($lastDown !== null || $lastUp !== null) {
             $lines[] = '';
             if ($lastDown !== null) {
-                $lines[] = '🕓 ' . $this->escapeHtml($lastDown) . ' ' . trans('onu_event_down');
+                $lines[] = $this->escapeHtml($lastDown) . ' ' . trans('onu_event_down');
             }
             if ($lastUp !== null) {
-                $lines[] = '🕓 ' . $this->escapeHtml($lastUp) . ' ' . trans('onu_event_up');
+                $lines[] = $this->escapeHtml($lastUp) . ' ' . trans('onu_event_up');
             }
             $this->addPlainLine($lines, trans('onu_label_last_down_reason'), $onu['last_down_reason'] ?? null);
         } elseif (!empty($onu['last_down_reason'])) {
@@ -614,13 +614,13 @@ abstract class Command extends CommandHandler
         }
 
         $lines[] = '';
-        $lines[] = '🔌 ' . trans('common_label_lan') . ': ' . $this->escapeHtml($lanStatus ?? '-');
+        $lines[] = trans('common_label_lan') . ': ' . $this->escapeHtml($lanStatus ?? '-');
         $lines[] = trans('common_label_mac') . ': ' . $this->escapeHtml($macState ?? '-');
 
         if ($location !== null || !empty($onu['description'])) {
             $lines[] = '';
             if ($location !== null) {
-                $lines[] = '📍 ' . $this->escapeHtml($location);
+                $lines[] =  $this->escapeHtml($location);
             }
             $this->addPlainLine($lines, trans('onu_label_description'), $onu['description'] ?? null);
         }
@@ -740,8 +740,8 @@ abstract class Command extends CommandHandler
         $text .= '<b>' . trans('user_label_framed_ip') . ':</b> ' . ($user['framed_ip'] ?? '') . "\n";
         $text .= '<b>' . trans('user_label_local_ip') . ':</b> ' . ($user['local_ip'] ?? '') . "\n";
         $text .= '<b>' . trans('user_label_local_mac') . ':</b> ' . (($user['local_mac'] ?? '') !== '' ? $user['local_mac'] : '-') . "\n";
-        $text .= '<b>' . trans('internet') . ':</b> ' . (!empty($user['blocked']) ? '🚫' : '✅') . "\n";
-        $text .= '<b>' . trans('user_label_online') . ':</b> ' . (!empty($user['online']) ? '✅' : '🚫') . "\n";
+        $text .= '<b>' . trans('internet') . ':</b> ' . (!empty($user['blocked']) ? '❌' : '✅') . "\n";
+        $text .= '<b>' . trans('user_label_online') . ':</b> ' . (!empty($user['online']) ? '✅' : '❌') . "\n";
         $text .= '<b>' . trans('status') . ':</b> ' . $status . "\n";
         $text .= '<b>' . trans('last_auth') . ':</b> ' . ($user['last_connection'] ?? '') . "\n";
         $text .= '<b>' . trans('address') . ':</b> ' . ($user['address'] ?? '') . "\n";
@@ -764,24 +764,25 @@ abstract class Command extends CommandHandler
         $lines = [];
         $location = $this->buildLocationLine($data['device_name'] ?? null, $data['interface_name'] ?? $data['name'] ?? null);
         $lanStatus = $this->resolveLanStatus($data['status'] ?? null, $data['status'] ?? null);
+        $statusEmoji = $this->resolveStatusEmoji($lanStatus);
         $macState = !empty($data['client_mac']) ? trans('yes') : null;
         $summary = !empty($data['status'])
-            ? (trans('access_port_label_status') . ': ' . (string)$data['status'])
+            ? ($statusEmoji . trans('access_port_label_status') . ': ' . (string)$data['status'])
             : trans('mac_found_block_title');
 
         $lines[] = '';
-        $lines[] = '🔌 <b>' . $this->escapeHtml(trans('access_port_block_title')) . '</b>';
+        $lines[] = ' <b>' . $this->escapeHtml(trans('access_port_block_title')) . '</b>';
         $this->addPlainLine($lines, trans('access_port_label_status'), $data['status'] ?? null);
         $this->addPlainLine($lines, trans('access_port_label_type'), $data['interface_type'] ?? null);
 
         $lines[] = '';
-        $lines[] = '🔌 ' . trans('common_label_lan') . ': ' . $this->escapeHtml($lanStatus ?? '-');
+        $lines[] =  trans('common_label_lan') . ': ' . $this->escapeHtml($lanStatus ?? '-');
         $lines[] = trans('common_label_mac') . ': ' . $this->escapeHtml($macState ?? '-');
 
         if ($location !== null || !empty($data['description'])) {
             $lines[] = '';
             if ($location !== null) {
-                $lines[] = '📍 ' . $this->escapeHtml($location);
+                $lines[] =  $this->escapeHtml($location);
             }
             $this->addPlainLine($lines, trans('access_port_label_description'), $data['description'] ?? null);
         }
@@ -796,22 +797,26 @@ abstract class Command extends CommandHandler
     {
         $lines = [];
         $location = $this->buildLocationLine($data['device_name'] ?? null, $data['interface_name'] ?? $data['name'] ?? null);
-        $summary = !empty($data['interface_type'])
-            ? (trans('mac_found_label_type') . ': ' . (string)$data['interface_type'])
-            : trans('mac_found_block_title');
+        $lanStatus = $this->resolveLanStatus($data['status'] ?? null, $data['status'] ?? null);
+        $statusEmoji = $this->resolveStatusEmoji($lanStatus);
+        $summary = !empty($data['status'])
+            ? ($statusEmoji . trans('access_port_label_status') . ': ' . (string)$data['status'])
+            : (!empty($data['interface_type'])
+                ? (trans('mac_found_label_type') . ': ' . (string)$data['interface_type'])
+                : trans('mac_found_block_title'));
 
         $lines[] = '';
         $lines[] = '🔎 <b>' . $this->escapeHtml(trans('mac_found_block_title')) . '</b>';
         $this->addPlainLine($lines, trans('mac_found_label_type'), $data['interface_type'] ?? null);
 
         $lines[] = '';
-        $lines[] = '🔌 ' . trans('common_label_lan') . ': -';
+        $lines[] =  trans('common_label_lan') . ': -';
         $lines[] = trans('common_label_mac') . ': ' . $this->escapeHtml(trans('yes'));
 
         if ($location !== null || !empty($data['description'])) {
             $lines[] = '';
             if ($location !== null) {
-                $lines[] = '📍 ' . $this->escapeHtml($location);
+                $lines[] =  $this->escapeHtml($location);
             }
             $this->addPlainLine($lines, trans('mac_found_label_description'), $data['description'] ?? null);
         }
@@ -879,6 +884,21 @@ abstract class Command extends CommandHandler
         return $value;
     }
 
+    protected function resolveStatusEmoji(?string $status): string
+    {
+        $value = strtolower(trim((string)($status ?? '')));
+
+        if ($value === 'up' || $value === 'online' || $value === 'active') {
+            return '✅ ';
+        }
+
+        if ($value === 'down' || $value === 'offline' || $value === 'inactive') {
+            return '❌ ';
+        }
+
+        return '';
+    }
+
     protected function resolveMacPresenceText($flag): ?string
     {
         if ($flag === true) {
@@ -923,10 +943,10 @@ abstract class Command extends CommandHandler
             $accessPortTitle = (string)trans('access_port_block_title', [], $locale);
             $macFoundTitle = (string)trans('mac_found_block_title', [], $locale);
 
-            $markers[] = "\n📡 <b>" . $this->escapeHtml($onuTitle) . "</b>";
-            $markers[] = "\n📡 " . $onuTitle;
-            $markers[] = "\n🔌 <b>" . $this->escapeHtml($accessPortTitle) . "</b>";
-            $markers[] = "\n🔌 " . $accessPortTitle;
+            $markers[] = "\n <b>" . $this->escapeHtml($onuTitle) . "</b>";
+            $markers[] = "\n " . $onuTitle;
+            $markers[] = "\n <b>" . $this->escapeHtml($accessPortTitle) . "</b>";
+            $markers[] = "\n " . $accessPortTitle;
             $markers[] = "\n🔎 <b>" . $this->escapeHtml($macFoundTitle) . "</b>";
             $markers[] = "\n🔎 " . $macFoundTitle;
         }
