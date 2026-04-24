@@ -79,17 +79,66 @@ abstract class Command extends CommandHandler
     }
 
     public function setLocale($locale) {
-        app()->setLocale($locale);
-        Cache::put($this->user_id . '_locale', $locale);
+        $normalizedLocale = $this->normalizeLocale($locale);
+
+        if (empty($normalizedLocale)) {
+            return;
+        }
+
+        app()->setLocale($normalizedLocale);
+        Cache::forever($this->user_id . '_locale', $normalizedLocale);
     }
 
     public function getLocale() {
         $locale = Cache::get($this->user_id . '_locale');
-        if( empty($locale) ) {
-            $locale = app()->getLocale();
+
+        if (!empty($locale)) {
+            return $locale;
         }
 
-        return $locale;
+        $telegramLocale = $this->extractTelegramLocale();
+
+        if (!empty($telegramLocale)) {
+            return $telegramLocale;
+        }
+
+        return app()->getLocale();
+    }
+
+    private function extractTelegramLocale(): ?string
+    {
+        $languageCode = null;
+
+        if (isset($this->update->message->from->language_code)) {
+            $languageCode = $this->update->message->from->language_code;
+        } elseif (isset($this->update->callback_query->from->language_code)) {
+            $languageCode = $this->update->callback_query->from->language_code;
+        }
+
+        return $this->normalizeLocale($languageCode);
+    }
+
+    private function normalizeLocale($locale): ?string
+    {
+        if (empty($locale)) {
+            return null;
+        }
+
+        $locale = strtolower((string)$locale);
+
+        if (strpos($locale, 'uk') === 0) {
+            return 'uk';
+        }
+
+        if (strpos($locale, 'ru') === 0) {
+            return 'ru';
+        }
+
+        if (strpos($locale, 'en') === 0) {
+            return 'en';
+        }
+
+        return null;
     }
 
     public function clearUserState(): void
