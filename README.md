@@ -142,6 +142,9 @@ TELEGRAM_HISTORY_TRACK_LIMIT=5000
 TELEGRAM_HISTORY_PURGE_INTERVAL_SECONDS=300
 # Сколько старых сообщений удалять за один проход (для снижения нагрузки)
 TELEGRAM_HISTORY_DELETE_BATCH_SIZE=25
+# Опциональный код страны по умолчанию для локальных номеров без +
+# Примеры: 38 (UA), 48 (PL), 1 (US/CA)
+TELEGRAM_DEFAULT_PHONE_COUNTRY_CODE=
 
 MIKBILL_CABINET_HOST="https://stat.my-domen.ru"
 MIKBILL_HOST="https://admin.my-domen.ru"
@@ -163,6 +166,22 @@ WILDCORE_API_KEY="your_wildcore_api_key"
 - для порта коммутатора: статус порта, тип, LAN/MAC, локация, вывод
 - для неопределенного типа: технический блок найденного подключения
 - Кнопка `🔄 Wildcore обновить` в карточке обновляет данные из источника `device`
+
+### 3.4 Формат телефонов в карточке абонента
+
+Телефоны в карточке отображаются в международном формате с `+` в начале:
+
+- `+380...` остаётся как есть
+- `00380...` преобразуется в `+380...`
+- номера без кода страны могут быть приведены через `TELEGRAM_DEFAULT_PHONE_COUNTRY_CODE`
+
+Пример:
+
+```shell script
+TELEGRAM_DEFAULT_PHONE_COUNTRY_CODE=38
+```
+
+Если переменная не задана, неоднозначные локальные номера выводятся без принудительного изменения.
 
 
 ### 3.2 Ключ приложения
@@ -252,6 +271,7 @@ TELEGRAM_HISTORY_RETENTION_DAYS=7
 TELEGRAM_HISTORY_TRACK_LIMIT=5000
 TELEGRAM_HISTORY_PURGE_INTERVAL_SECONDS=300
 TELEGRAM_HISTORY_DELETE_BATCH_SIZE=25
+TELEGRAM_DEFAULT_PHONE_COUNTRY_CODE=
 
 MIKBILL_HOST="https://admin.my-domen.ru"
 MIKBILL_CABINET_HOST="https://stat.my-domen.ru"

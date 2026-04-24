@@ -723,6 +723,8 @@ abstract class Command extends CommandHandler
     {
         $status = $this->resolveUserStatus($user['state'] ?? null);
         $currency = isset($systemOptions['data'][0]['UE']) ? (string)$systemOptions['data'][0]['UE'] : 'грн.';
+        $mobilePhone = $this->formatPhoneInternational($user['mob_tel'] ?? null);
+        $smsPhone = $this->formatPhoneInternational($user['sms_tel'] ?? null);
 
         $text = '<b>' . trans('user_info') . '</b>  ' . "\n";
         $text .= '<b>' . trans('login') . ':</b> ' . ($user['user'] ?? '') . "\n";
@@ -731,8 +733,8 @@ abstract class Command extends CommandHandler
         $text .= '<b>' . trans('contract') . ':</b>' . ($user['numdogovor'] ?? '') . " \n";
         $text .= '<b>' . trans('fio') . ':</b> ' . ($user['fio'] ?? '') . "\n";
         $text .= '<b>' . trans('tariff') . ':</b> ' . ($user['tarif'] ?? '') . "\n";
-        $text .= '<b>' . trans('phone_mob') . '</b> ' . ($user['mob_tel'] ?? '') . "\n";
-        $text .= '<b>' . trans('phone_sms') . ':</b> ' . ($user['sms_tel'] ?? '') . "\n";
+        $text .= '<b>' . trans('phone_mob') . '</b> ' . $mobilePhone . "\n";
+        $text .= '<b>' . trans('phone_sms') . ':</b> ' . $smsPhone . "\n";
         $text .= '<b>' . trans('deposit') . ':</b> ' . $this->formatMoney($user['deposit'] ?? 0) . ' ' . $currency . " \n";
         $text .= '<b>' . trans('credit') . ':</b> ' . $this->formatMoney($user['credit'] ?? 0) . ' ' . $currency . " \n";
         $text .= '<b>' . trans('user_label_framed_ip') . ':</b> ' . ($user['framed_ip'] ?? '') . "\n";
@@ -956,6 +958,50 @@ abstract class Command extends CommandHandler
         }
 
         return trim((string)$value) !== '' ? trim((string)$value) . $suffix : null;
+    }
+
+    protected function formatPhoneInternational($value): string
+    {
+        $raw = trim((string)($value ?? ''));
+
+        if ($raw === '') {
+            return '';
+        }
+
+        $digits = preg_replace('/\D+/', '', $raw);
+
+        if (!is_string($digits) || $digits === '') {
+            return $raw;
+        }
+
+        $defaultCountryCode = preg_replace('/\D+/', '', (string)config('telebot.bots.bot.default_phone_country_code', ''));
+
+        if (strpos($raw, '+') === 0) {
+            return '+' . $digits;
+        }
+
+        if (strpos($digits, '00') === 0 && strlen($digits) > 2) {
+            return '+' . substr($digits, 2);
+        }
+
+        // Number already looks like E.164 without '+': just prepend plus.
+        if (strlen($digits) >= 11 && strlen($digits) <= 15 && strpos($digits, '0') !== 0) {
+            return '+' . $digits;
+        }
+
+        // Use configured default country code for local/national formats.
+        if ($defaultCountryCode !== '') {
+            $national = preg_replace('/^0+/', '', $digits);
+
+            if (!is_string($national) || $national === '') {
+                return '+' . $defaultCountryCode;
+            }
+
+            return '+' . $defaultCountryCode . $national;
+        }
+
+        // Ambiguous local number without country code.
+        return $raw;
     }
 
     protected function formatOnuFdbFlag($flag): ?string
