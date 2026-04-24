@@ -12,11 +12,12 @@ class API
      */
     public static function wildcore_enabled(): bool
     {
-        $enabled = strtolower((string)config('services.wildcore.enabled', 'false')) === 'true';
+        $enabledValue = config('services.wildcore.enabled', false);
+        $enabled = filter_var($enabledValue, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
         $url = trim((string)config('services.wildcore.url', ''));
         $apiKey = trim((string)config('services.wildcore.api_key', ''));
 
-        return $enabled && $url !== '' && $apiKey !== '';
+        return $enabled === true && $url !== '' && $apiKey !== '';
     }
 
     public function normalize_mac($mac): ?string
