@@ -2,6 +2,7 @@
 namespace App\Services\Telegram\Commands;
 
 use App\Services\MikBill\Admin\API;
+use App\Services\Wildcore\API as WildcoreAPI;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use WeStacks\TeleBot\Handlers\CommandHandler;
@@ -437,6 +438,7 @@ abstract class Command extends CommandHandler
         foreach ($uids as $uid) {
             $user = $api->getUserMB($uid);
             $status = $this->resolveUserStatus($user['state'] ?? null);
+            $onu = $this->getOnuByClientMac($user['local_mac'] ?? null);
 
             $text = "<b>" . trans("user_info") . "</b>  \n";
             $text .= "<b>" . trans("login") . ":</b> " . $user['user'] . "\n";
@@ -457,63 +459,73 @@ abstract class Command extends CommandHandler
             $text .= "<b>" . trans("status") . ":</b> " . $status . "\n";
             $text .= "<b>" . trans("last_auth") . ":</b> " . $user['last_connection'] . "\n";
             $text .= "<b>" . trans("address") . ":</b> " . $user['address'] . "\n";
+            $text .= $this->buildOnuMessageBlock($onu);
+
+            $inlineKeyboard = [
+                [
+                    [
+                        "text"          => trans("menu_history_sessions"),
+                        "callback_data" => "menuHistorySessions_" . $user['useruid']
+                    ],
+                    [
+                        "text"          => trans("menu_history_payments"),
+                        "callback_data" => "menuHistoryPayments_" . $user['useruid']
+                    ],
+                ],
+                [
+                    [
+                        "text"          => trans("menu_history_tickets"),
+                        "callback_data" => "menuHistoryTickets_" . $user['useruid']
+                    ],
+                    [
+                        "text"          => trans("menu_history_auths"),
+                        "callback_data" => "menuHistoryAuths_" . $user['useruid']
+                    ]
+                ],
+                [
+                    [
+                        "text"          => trans("menu_history_logs"),
+                        "callback_data" => "menuHistoryLogs_" . $user['useruid']
+                    ],
+                    [
+                        "text"          => trans("menu_user_kick"),
+                        "callback_data" => "menuUserKick_" . $user['useruid']
+                    ]
+                ],
+                [
+                    [
+                        "text"          => trans("menu_services"),
+                        "callback_data" => "menuServices_" . $user['useruid']
+                    ],
+                    [
+                        "text" => trans("cabinet_auth"),
+                        "url"  => $cabinet_host . "/?l=" . $user['user'] . "&p=" . $user['password']
+                    ],
+                ],
+            ];
+
+            $onuRefreshRow = $this->buildOnuRefreshButtonRow($onu);
+
+            if (!empty($onuRefreshRow)) {
+                $inlineKeyboard[] = $onuRefreshRow;
+            }
+
+            $inlineKeyboard[] = [
+                [
+                    "text"          => trans("menu_search"),
+                    "callback_data" => "menuSearch"
+                ],
+                [
+                    'text'          => trans("menu_main"),
+                    'callback_data' => "menuMain"
+                ]
+            ];
 
             $this->sendMessage([
                 'text'         => $text,
                 'parse_mode'   => 'HTML',
                 'reply_markup' => [
-                    'inline_keyboard' => [
-                        [
-                            [
-                                "text"          => trans("menu_history_sessions"),
-                                "callback_data" => "menuHistorySessions_" . $user['useruid']
-                            ],
-                            [
-                                "text"          => trans("menu_history_payments"),
-                                "callback_data" => "menuHistoryPayments_" . $user['useruid']
-                            ],
-                        ],
-                        [
-                            [
-                                "text"          => trans("menu_history_tickets"),
-                                "callback_data" => "menuHistoryTickets_" . $user['useruid']
-                            ],
-                            [
-                                "text"          => trans("menu_history_auths"),
-                                "callback_data" => "menuHistoryAuths_" . $user['useruid']
-                            ]
-                        ],
-                        [
-                            [
-                                "text"          => trans("menu_history_logs"),
-                                "callback_data" => "menuHistoryLogs_" . $user['useruid']
-                            ],
-                            [
-                                "text"          => trans("menu_user_kick"),
-                                "callback_data" => "menuUserKick_" . $user['useruid']
-                            ]
-                        ],
-                        [
-                            [
-                                "text"          => trans("menu_services"),
-                                "callback_data" => "menuServices_" . $user['useruid']
-                            ],
-                            [
-                                "text" => trans("cabinet_auth"),
-                                "url"  => $cabinet_host . "/?l=" . $user['user'] . "&p=" . $user['password']
-                            ],
-                        ],
-                        [
-                            [
-                                "text"          => trans("menu_search"),
-                                "callback_data" => "menuSearch"
-                            ],
-                            [
-                                'text'          => trans("menu_main"),
-                                'callback_data' => "menuMain"
-                            ]
-                        ]
-                    ]
+                    'inline_keyboard' => $inlineKeyboard
                 ]
             ]);
         }
@@ -598,6 +610,206 @@ abstract class Command extends CommandHandler
     protected function getSearchStateKey(): string
     {
         return $this->user_id . '_search_state';
+    }
+
+    protected function getOnuByClientMac($clientMac): ?array
+    {
+        try {
+            $wildcoreApi = new WildcoreAPI();
+            return $wildcoreApi->get_onu_by_client_mac($clientMac);
+        } catch (\Throwable $e) {
+            Log::warning('Wildcore ONU lookup failed', [
+                'message' => $e->getMessage(),
+            ]);
+        }
+
+        return null;
+    }
+
+    protected function getOnuByInterfaceAndClientMac(string $interfaceId, string $clientMac, string $source = 'cache'): ?array
+    {
+        try {
+            $wildcoreApi = new WildcoreAPI();
+
+            if (!WildcoreAPI::wildcore_enabled()) {
+                return null;
+            }
+
+            $search = $wildcoreApi->search_onu_by_client_mac($clientMac);
+
+            if (empty($search) || (string)($search['interface_id'] ?? '') !== (string)$interfaceId) {
+                return null;
+            }
+
+            $diag = $wildcoreApi->get_onu_diagnostic($interfaceId, $source);
+
+            if (!is_array($diag)) {
+                return null;
+            }
+
+            return $wildcoreApi->parse_onu_info($search, $diag, $clientMac);
+        } catch (\Throwable $e) {
+            Log::warning('Wildcore ONU refresh failed', [
+                'message' => $e->getMessage(),
+                'interface_id' => $interfaceId,
+            ]);
+        }
+
+        return null;
+    }
+
+    protected function buildOnuMessageBlock(?array $onu): string
+    {
+        if (empty($onu)) {
+            return '';
+        }
+
+        $lines = [];
+
+        $lines[] = '';
+        $lines[] = '📡 <b>' . $this->escapeHtml(trans('onu_block_title')) . '</b>';
+        $this->addOnuLine($lines, trans('onu_label_status'), $onu['status'] ?? null);
+        $this->addOnuLine(
+            $lines,
+            trans('onu_label_olt'),
+            trim((string)($onu['olt_name'] ?? '')) . ((empty($onu['olt_ip']) || empty($onu['olt_name'])) ? '' : ' / ') . trim((string)($onu['olt_ip'] ?? ''))
+        );
+        $this->addOnuLine($lines, trans('onu_label_port'), $onu['interface_name'] ?? null);
+        $this->addOnuLine($lines, trans('onu_label_onu'), $onu['onu_ident'] ?? null);
+        $this->addOnuLine($lines, trans('onu_label_description'), $onu['description'] ?? null);
+
+        $modelParts = array_filter([
+            $onu['vendor'] ?? null,
+            $onu['model'] ?? null,
+        ]);
+        $this->addOnuLine($lines, trans('onu_label_model'), implode(' ', $modelParts));
+
+        $opticLines = [];
+        $this->addOnuLine($opticLines, trans('onu_label_rx_onu'), $this->formatOnuMetric($onu['rx'] ?? null, ' dBm'));
+        $this->addOnuLine($opticLines, trans('onu_label_rx_olt'), $this->formatOnuMetric($onu['olt_rx'] ?? null, ' dBm'));
+        $this->addOnuLine($opticLines, trans('onu_label_tx_onu'), $this->formatOnuMetric($onu['tx'] ?? null, ' dBm'));
+        $this->addOnuLine($opticLines, trans('onu_label_temperature'), $this->formatOnuMetric($onu['temperature'] ?? null, ' °C'));
+        $this->addOnuLine($opticLines, trans('onu_label_voltage'), $this->formatOnuMetric($onu['voltage'] ?? null, ' V'));
+
+        if (!empty($opticLines)) {
+            $lines[] = '';
+            $lines[] = '🔦 <b>' . $this->escapeHtml(trans('onu_optics_title')) . '</b>';
+            $lines = array_merge($lines, $opticLines);
+        }
+
+        $eventLines = [];
+        $this->addOnuLine($eventLines, trans('onu_label_last_reg'), $onu['last_reg'] ?? null);
+        $this->addOnuLine($eventLines, trans('onu_label_last_dereg'), $onu['last_dereg'] ?? null);
+        $this->addOnuLine($eventLines, trans('onu_label_reason'), $onu['last_down_reason'] ?? null);
+
+        if (!empty($eventLines)) {
+            $lines[] = '';
+            $lines[] = '🕓 <b>' . $this->escapeHtml(trans('onu_events_title')) . '</b>';
+            $lines = array_merge($lines, $eventLines);
+        }
+
+        $lanLines = [];
+        $this->addOnuLine($lanLines, trans('onu_label_uni'), $onu['uni_ports'] ?? null);
+        $this->addOnuLine($lanLines, trans('onu_label_mac_fdb'), $this->formatOnuFdbFlag($onu['client_mac_found_in_fdb'] ?? null));
+        $this->addOnuLine($lanLines, trans('onu_label_vlan'), $onu['vlan'] ?? null);
+
+        if (!empty($lanLines)) {
+            $lines[] = '';
+            $lines[] = '🔌 <b>' . $this->escapeHtml(trans('onu_lan_title')) . '</b>';
+            $lines = array_merge($lines, $lanLines);
+        }
+
+        $this->addOnuLine($lines, trans('onu_label_summary'), $onu['summary'] ?? null);
+
+        return implode("\n", $lines) . "\n";
+    }
+
+    protected function buildOnuRefreshButtonRow(?array $onu): array
+    {
+        $interfaceId = (string)($onu['interface_id'] ?? '');
+        $clientMac = (string)($onu['client_mac'] ?? '');
+
+        if ($interfaceId === '' || $clientMac === '') {
+            return [];
+        }
+
+        return [
+            [
+                'text' => trans('onu_refresh_button'),
+                'callback_data' => 'refresh_onu:' . $interfaceId . ':' . $clientMac,
+            ]
+        ];
+    }
+
+    protected function replaceOnuBlock(string $messageText, string $onuBlock): string
+    {
+        $markerHtml = "\n📡 <b>" . $this->escapeHtml(trans('onu_block_title')) . "</b>";
+        $position = strpos($messageText, $markerHtml);
+
+        if ($position === false) {
+            $markerPlain = "\n📡 " . trans('onu_block_title');
+            $position = strpos($messageText, $markerPlain);
+        }
+
+        if ($position === false) {
+            $position = strpos($messageText, "\n📡 <b>ONU / ONT</b>");
+        }
+
+        if ($position === false) {
+            $position = strpos($messageText, "\n📡 ONU / ONT");
+        }
+
+        if ($position === false) {
+            return rtrim($messageText) . "\n" . ltrim($onuBlock, "\n");
+        }
+
+        return rtrim(substr($messageText, 0, $position)) . "\n" . ltrim($onuBlock, "\n");
+    }
+
+    protected function formatOnuMetric($value, string $suffix = ''): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        if (is_numeric($value)) {
+            return number_format((float)$value, 2, '.', '') . $suffix;
+        }
+
+        return trim((string)$value) !== '' ? trim((string)$value) . $suffix : null;
+    }
+
+    protected function formatOnuFdbFlag($flag): ?string
+    {
+        if ($flag === true) {
+            return trans('yes');
+        }
+
+        if ($flag === false) {
+            return trans('no');
+        }
+
+        return null;
+    }
+
+    protected function addOnuLine(array &$lines, string $label, $value): void
+    {
+        if ($value === null) {
+            return;
+        }
+
+        $text = trim((string)$value);
+
+        if ($text === '') {
+            return;
+        }
+
+        $lines[] = '<b>' . $label . ':</b> ' . $this->escapeHtml($text);
+    }
+
+    protected function escapeHtml($value): string
+    {
+        return htmlspecialchars((string)$value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     }
 
     protected function resolveUserStatus($state): string

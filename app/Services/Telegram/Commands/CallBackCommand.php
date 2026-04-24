@@ -3,9 +3,10 @@
 
 namespace App\Services\Telegram\Commands;
 
-use App;
 use App\Helpers\Helpers;
 use App\Services\MikBill\Admin\API;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use WeStacks\TeleBot\Objects\Update;
 use WeStacks\TeleBot\TeleBot;
 
@@ -26,7 +27,14 @@ class CallBackCommand extends Command
 
     public function handle()
     {
-        $params = explode("_", $this->update->callback_query->data);
+        $callbackData = (string)($this->update->callback_query->data ?? '');
+
+        if (strpos($callbackData, 'refresh_onu:') === 0) {
+            $this->refreshOnu($callbackData);
+            return;
+        }
+
+        $params = explode("_", $callbackData);
 
         if (isset($params[0]) and method_exists(self::class, $params[0])) {
             $method = $params[0];
@@ -36,6 +44,102 @@ class CallBackCommand extends Command
             $this->sendMessage([
                 'text'       => trans("menu_not_work"),
                 'parse_mode' => 'HTML'
+            ]);
+        }
+    }
+
+    private function refreshOnu(string $callbackData): void
+    {
+        $parts = explode(':', $callbackData, 3);
+
+        if (count($parts) < 3) {
+            $this->answerCallback(trans('onu_refresh_error'));
+            return;
+        }
+
+        $interfaceId = trim((string)$parts[1]);
+        $clientMac = trim((string)$parts[2]);
+
+        if ($interfaceId === '' || $clientMac === '') {
+            $this->answerCallback(trans('onu_refresh_error'));
+            return;
+        }
+
+        $throttleKey = 'onu_refresh_' . $interfaceId;
+
+        if (Cache::has($throttleKey)) {
+            $this->answerCallback(trans('onu_refresh_throttled'));
+            return;
+        }
+
+        Cache::put($throttleKey, 1, now()->addSeconds(30));
+
+        $onu = $this->getOnuByInterfaceAndClientMac($interfaceId, $clientMac, 'device');
+
+        if (empty($onu)) {
+            $this->answerCallback(trans('onu_refresh_error'));
+            return;
+        }
+
+        $onuBlock = $this->buildOnuMessageBlock($onu);
+
+        if ($onuBlock === '') {
+            $this->answerCallback(trans('onu_refresh_error'));
+            return;
+        }
+
+        $message = $this->update->callback_query->message ?? null;
+        $chatId = isset($message->chat->id) ? (int)$message->chat->id : 0;
+        $messageId = isset($message->message_id) ? (int)$message->message_id : 0;
+        $currentText = isset($message->text) ? (string)$message->text : '';
+
+        if ($chatId <= 0 || $messageId <= 0 || $currentText === '') {
+            $this->answerCallback(trans('onu_refresh_error'));
+            return;
+        }
+
+        $updatedText = $this->replaceOnuBlock($currentText, $onuBlock);
+        $replyMarkup = null;
+
+        if (isset($message->reply_markup)) {
+            $replyMarkup = json_decode(json_encode($message->reply_markup), true);
+        }
+
+        try {
+            $editPayload = [
+                'chat_id' => $chatId,
+                'message_id' => $messageId,
+                'text' => $updatedText,
+                'parse_mode' => 'HTML',
+            ];
+
+            if (is_array($replyMarkup) && !empty($replyMarkup)) {
+                $editPayload['reply_markup'] = $replyMarkup;
+            }
+
+            $this->bot->editMessageText($editPayload);
+
+            $this->answerCallback(trans('onu_refresh_success'));
+        } catch (\Throwable $e) {
+            Log::warning('Failed to edit Telegram message during ONU refresh', [
+                'message' => $e->getMessage(),
+                'interface_id' => $interfaceId,
+            ]);
+
+            $this->answerCallback(trans('onu_refresh_error'));
+        }
+    }
+
+    private function answerCallback(string $text): void
+    {
+        try {
+            $this->bot->answerCallbackQuery([
+                'callback_query_id' => $this->update->callback_query->id,
+                'text' => $text,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Failed to answer callback query', [
+                'message' => $e->getMessage(),
             ]);
         }
     }
