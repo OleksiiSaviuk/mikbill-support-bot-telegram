@@ -854,11 +854,11 @@ abstract class Command extends CommandHandler
     protected function resolveMacPresenceText($flag): ?string
     {
         if ($flag === true) {
-              return trans('yes');
+            return trans('yes');
         }
 
-              return trans('no');
-            return 'не знайдено';
+        if ($flag === false) {
+            return trans('no');
         }
 
         return null;
