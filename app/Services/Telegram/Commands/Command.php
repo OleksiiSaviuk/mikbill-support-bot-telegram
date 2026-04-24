@@ -492,6 +492,13 @@ abstract class Command extends CommandHandler
 
         $keyboard[] = [
             [
+                "text"          => trans("menu_clear_history"),
+                "callback_data" => "menuClearHistory"
+            ]
+        ];
+
+        $keyboard[] = [
+            [
                 "text"          => trans("menu_search"),
                 "callback_data" => "menuSearch"
             ],

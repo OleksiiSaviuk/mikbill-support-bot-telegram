@@ -461,16 +461,22 @@ class CallBackCommand extends Command
 
     private function menuClearHistory($param)
     {
+        $currentLocale = $this->getLocale();
+
         try {
             $this->bot->answerCallbackQuery([
                 'callback_query_id' => $this->update->callback_query->id,
-                'text'              => trans("history_cleared"),
             ]);
         } catch (\Throwable $e) {
             // Ignore callback answer errors after cleanup.
         }
 
         $this->clearUserState();
+
+        if (!empty($currentLocale)) {
+            $this->setLocale($currentLocale);
+        }
+
         $chatId = (int)$this->resolveChatId();
 
         if ($chatId > 0) {
@@ -484,31 +490,8 @@ class CallBackCommand extends Command
             $this->clearChatHistoryFromMessage($fromMessageId, $deleteLimit);
         }
 
-        $this->setLastAction('menuMain');
-        $this->sendMessage([
-            'text'         => "<b>" . trans("history_cleared") . "</b>",
-            'parse_mode'   => 'HTML',
-            'reply_markup' => [
-                'inline_keyboard' => [
-                    [
-                        [
-                            "text"          => trans("menu_search"),
-                            "callback_data" => "menuSearch"
-                        ],
-                        [
-                            "text"          => trans("menu_locale"),
-                            "callback_data" => "menuLocale"
-                        ]
-                    ],
-                    [
-                        [
-                            "text"          => trans("menu_clear_history"),
-                            "callback_data" => "menuClearHistory"
-                        ]
-                    ]
-                ]
-            ]
-        ]);
+        // Keep bot active after cleanup by showing the start/main menu.
+        $this->menuMain();
     }
 
     private function menuLocale()
