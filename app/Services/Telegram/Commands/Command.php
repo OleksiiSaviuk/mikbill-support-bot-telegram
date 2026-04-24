@@ -673,11 +673,11 @@ abstract class Command extends CommandHandler
         $statusIcon = ($status !== null && stripos($status, 'online') !== false) ? '✅' : '❌';
 
         $lines[] = '';
-        $lines[] = '📡 <b>ONU</b>';
+            $lines[] = '📡 <b>' . $this->escapeHtml(trans('onu_block_title')) . '</b>';
         if ($status !== null) {
             $lines[] = trans('onu_label_status') . ': ' . $statusIcon . ' ' . $this->escapeHtml($status);
         }
-        $this->addPlainLine($lines, 'RX', $this->formatOnuMetric($onu['rx'] ?? null, ' dBm'));
+        $this->addPlainLine($lines, 'RX', $this->formatOnuMetric($onu['rx'] ?? null, ' dBm')); // RX — технічна абревіатура, без перекладу
 
         if ($lastDown !== null || $lastUp !== null) {
             $lines[] = '';
@@ -701,11 +701,11 @@ abstract class Command extends CommandHandler
             if ($location !== null) {
                 $lines[] = '📍 ' . $this->escapeHtml($location);
             }
-            $this->addPlainLine($lines, 'Опис', $onu['description'] ?? null);
+            $this->addPlainLine($lines, trans('onu_label_description'), $onu['description'] ?? null);
         }
 
         $lines[] = '';
-        $this->addPlainLine($lines, 'Висновок', $onu['summary'] ?? null);
+        $this->addPlainLine($lines, trans('onu_label_summary'), $onu['summary'] ?? null);
 
         return implode("\n", $lines) . "\n";
     }
@@ -736,15 +736,15 @@ abstract class Command extends CommandHandler
         $lines = [];
         $location = $this->buildLocationLine($data['device_name'] ?? null, $data['interface_name'] ?? $data['name'] ?? null);
         $lanStatus = $this->resolveLanStatus($data['status'] ?? null, $data['status'] ?? null);
-        $macState = !empty($data['client_mac']) ? 'знайдено' : null;
+        $macState = !empty($data['client_mac']) ? trans('yes') : null;
         $summary = !empty($data['status'])
-            ? ('статус порту: ' . (string)$data['status'])
-            : 'MAC знайдено на порті доступу';
+            ? (trans('access_port_label_status') . ': ' . (string)$data['status'])
+            : trans('mac_found_block_title');
 
         $lines[] = '';
-        $lines[] = '🔌 <b>Порт доступу</b>';
-        $this->addPlainLine($lines, 'Статус порту', $data['status'] ?? null);
-        $this->addPlainLine($lines, 'Тип', $data['interface_type'] ?? null);
+        $lines[] = '🔌 <b>' . $this->escapeHtml(trans('access_port_block_title')) . '</b>';
+        $this->addPlainLine($lines, trans('access_port_label_status'), $data['status'] ?? null);
+        $this->addPlainLine($lines, trans('access_port_label_type'), $data['interface_type'] ?? null);
 
         $lines[] = '';
         $lines[] = '🔌 LAN: ' . $this->escapeHtml($lanStatus ?? '-');
@@ -755,10 +755,11 @@ abstract class Command extends CommandHandler
             if ($location !== null) {
                 $lines[] = '📍 ' . $this->escapeHtml($location);
             }
-            $this->addPlainLine($lines, 'Опис', $data['description'] ?? null);
+            $this->addPlainLine($lines, trans('access_port_label_description'), $data['description'] ?? null);
         }
 
-        $this->addPlainLine($lines, 'Висновок', $summary);
+        $lines[] = '';
+        $this->addPlainLine($lines, trans('onu_label_summary'), $summary);
 
         return implode("\n", $lines) . "\n";
     }
@@ -768,26 +769,27 @@ abstract class Command extends CommandHandler
         $lines = [];
         $location = $this->buildLocationLine($data['device_name'] ?? null, $data['interface_name'] ?? $data['name'] ?? null);
         $summary = !empty($data['interface_type'])
-            ? ('тип: ' . (string)$data['interface_type'])
-            : 'тип підключення не визначено';
+            ? (trans('mac_found_label_type') . ': ' . (string)$data['interface_type'])
+            : trans('mac_found_block_title');
 
         $lines[] = '';
-        $lines[] = '🔎 <b>MAC знайдено</b>';
-        $this->addPlainLine($lines, 'Тип', $data['interface_type'] ?? null);
+        $lines[] = '🔎 <b>' . $this->escapeHtml(trans('mac_found_block_title')) . '</b>';
+        $this->addPlainLine($lines, trans('mac_found_label_type'), $data['interface_type'] ?? null);
 
         $lines[] = '';
         $lines[] = '🔌 LAN: -';
-        $lines[] = 'MAC: знайдено';
+        $lines[] = 'MAC: ' . $this->escapeHtml(trans('yes'));
 
         if ($location !== null || !empty($data['description'])) {
             $lines[] = '';
             if ($location !== null) {
                 $lines[] = '📍 ' . $this->escapeHtml($location);
             }
-            $this->addPlainLine($lines, 'Опис', $data['description'] ?? null);
+            $this->addPlainLine($lines, trans('mac_found_label_description'), $data['description'] ?? null);
         }
 
-        $this->addPlainLine($lines, 'Висновок', $summary);
+        $lines[] = '';
+        $this->addPlainLine($lines, trans('onu_label_summary'), $summary);
 
         return implode("\n", $lines) . "\n";
     }
@@ -852,10 +854,10 @@ abstract class Command extends CommandHandler
     protected function resolveMacPresenceText($flag): ?string
     {
         if ($flag === true) {
-            return 'знайдено';
+              return trans('yes');
         }
 
-        if ($flag === false) {
+              return trans('no');
             return 'не знайдено';
         }
 
