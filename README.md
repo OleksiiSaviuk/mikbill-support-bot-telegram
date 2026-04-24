@@ -11,6 +11,9 @@
  - просмотр истории сессий
  - просмотр услуг
  - вход в ЛК 
+ - интеграция с Wildcore (диагностика ONU/ONT и порта доступа)
+ - кнопка обновления данных Wildcore прямо в карточке абонента
+ - определение типа подключения: ONU / порт коммутатора / неизвестно
  
 ### Changelog:
 #### 23.04.2022
@@ -145,7 +148,22 @@ MIKBILL_HOST="https://admin.my-domen.ru"
 MIKBILL_LOGIN=admin
 MIKBILL_PASSWORD=admin
 
+# Wildcore
+WILDCORE_ENABLED=false
+WILDCORE_URL="https://wildcore.my-domen.ru"
+WILDCORE_API_KEY="your_wildcore_api_key"
+
 ```
+
+### 3.3 Интеграция Wildcore (ONU/ONT)
+
+Если `WILDCORE_ENABLED=true`, в карточке абонента дополнительно отображается блок диагностики:
+
+- для ONU/ONT: статус, RX, последние события, последняя причина падения, LAN/MAC, локация, вывод
+- для порта коммутатора: статус порта, тип, LAN/MAC, локация, вывод
+- для неопределенного типа: технический блок найденного подключения
+- Кнопка `🔄 Wildcore обновить` в карточке обновляет данные из источника `device`
+
 
 ### 3.2 Ключ приложения
 
@@ -239,6 +257,10 @@ MIKBILL_HOST="https://admin.my-domen.ru"
 MIKBILL_CABINET_HOST="https://stat.my-domen.ru"
 MIKBILL_LOGIN=admin
 MIKBILL_PASSWORD=admin
+
+WILDCORE_ENABLED=false
+WILDCORE_URL="https://wildcore.my-domen.ru"
+WILDCORE_API_KEY="your_wildcore_api_key"
 ```
 
 ### Telegram автоочистка истории
