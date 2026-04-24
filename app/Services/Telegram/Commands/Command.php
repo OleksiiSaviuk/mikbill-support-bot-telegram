@@ -678,18 +678,10 @@ abstract class Command extends CommandHandler
         $this->addOnuLine($lines, trans('onu_label_onu'), $onu['onu_ident'] ?? null);
         $this->addOnuLine($lines, trans('onu_label_description'), $onu['description'] ?? null);
 
-        $modelParts = array_filter([
-            $onu['vendor'] ?? null,
-            $onu['model'] ?? null,
-        ]);
-        $this->addOnuLine($lines, trans('onu_label_model'), implode(' ', $modelParts));
-
         $opticLines = [];
         $this->addOnuLine($opticLines, trans('onu_label_rx_onu'), $this->formatOnuMetric($onu['rx'] ?? null, ' dBm'));
         $this->addOnuLine($opticLines, trans('onu_label_rx_olt'), $this->formatOnuMetric($onu['olt_rx'] ?? null, ' dBm'));
         $this->addOnuLine($opticLines, trans('onu_label_tx_onu'), $this->formatOnuMetric($onu['tx'] ?? null, ' dBm'));
-        $this->addOnuLine($opticLines, trans('onu_label_temperature'), $this->formatOnuMetric($onu['temperature'] ?? null, ' °C'));
-        $this->addOnuLine($opticLines, trans('onu_label_voltage'), $this->formatOnuMetric($onu['voltage'] ?? null, ' V'));
 
         if (!empty($opticLines)) {
             $lines[] = '';

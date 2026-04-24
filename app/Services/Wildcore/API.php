@@ -195,8 +195,8 @@ class API
         ]));
 
         $description = $this->stringOrNull($this->firstNotEmpty([
-            $this->findByKeyRecursive($diagRoot, ['description', 'desc']),
-            $this->findByKeyRecursive($rawSearch, ['description', 'desc']),
+            $this->findByKeyRecursive($diagRoot, ['onu_description', 'description', 'desc', 'comment']),
+            $this->findByKeyRecursive($rawSearch, ['onu_description', 'description', 'desc', 'comment']),
         ]));
 
         $vendor = $this->stringOrNull($this->firstNotEmpty([
@@ -242,7 +242,7 @@ class API
             'voltage' => $this->toFloatOrNull($this->findByKeyRecursive($diagRoot, ['voltage', 'volt'])),
 
             'last_reg' => $this->stringOrNull($this->findByKeyRecursive($diagRoot, ['last_reg', 'last_register', 'last_registration'])),
-            'last_dereg' => $this->stringOrNull($this->findByKeyRecursive($diagRoot, ['last_dereg', 'last_deregister', 'last_down'])),
+            'last_dereg' => $this->stringOrNull($this->findByKeyRecursive($diagRoot, ['last_dereg', 'last_deregister', 'last_down', 'last_down_time', 'last_down_at', 'down_time', 'deregister_date'])),
             'last_down_reason' => $this->stringOrNull($this->findByKeyRecursive($diagRoot, ['last_down_reason', 'down_reason', 'dereg_reason'])),
 
             'uni_ports' => $uniPorts,
