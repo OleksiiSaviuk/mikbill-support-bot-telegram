@@ -437,89 +437,10 @@ abstract class Command extends CommandHandler
 
         foreach ($uids as $uid) {
             $user = $api->getUserMB($uid);
-            $status = $this->resolveUserStatus($user['state'] ?? null);
             $onu = $this->getOnuByClientMac($user['local_mac'] ?? null);
+            $text = $this->buildUserCardMessage($user, $onu, $systemOptions);
 
-            $text = "<b>" . trans("user_info") . "</b>  \n";
-            $text .= "<b>" . trans("login") . ":</b> " . $user['user'] . "\n";
-            $text .= "<b>" . trans("password") . ":</b> <tg-spoiler>" . htmlspecialchars((string)($user['password'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "</tg-spoiler>\n";
-            $text .= "<b>" . trans("uid") . ":</b>" . $user['useruid'] . " \n";
-            $text .= "<b>" . trans("contract") . ":</b>" . $user['numdogovor'] . " \n";
-            $text .= "<b>" . trans("fio") . ":</b> " . $user['fio'] . "\n";
-            $text .= "<b>" . trans("tariff") . ":</b> " . $user['tarif'] . "\n";
-            $text .= "<b>" . trans("phone_mob") . "</b> " . $user['mob_tel'] . "\n";
-            $text .= "<b>" . trans("phone_sms") . ":</b> " . $user['sms_tel'] . "\n";
-            $text .= "<b>" . trans("deposit") . ":</b> " . $this->formatMoney($user['deposit']) . " " . (isset($systemOptions['data'][0]['UE']) ? $systemOptions['data'][0]['UE'] : 'грн.') . " \n";
-            $text .= "<b>" . trans("credit") . ":</b> " . $this->formatMoney($user['credit']) . " " . (isset($systemOptions['data'][0]['UE']) ? $systemOptions['data'][0]['UE'] : 'грн.') . " \n";
-            $text .= "<b>Framed IP:</b> " . $user['framed_ip'] . "\n";
-            $text .= "<b>Local IP:</b> " . $user['local_ip'] . "\n";
-            $text .= "<b>Local MAC:</b> " . ($user['local_mac'] ?? '-') . "\n";
-            $text .= "<b>" . trans("internet") . ":</b> " . ($user['blocked'] ? '🚫' : '✅') . "\n";
-            $text .= "<b>On-line:</b> " . ($user['online'] ? '✅' : '🚫') . "\n";
-            $text .= "<b>" . trans("status") . ":</b> " . $status . "\n";
-            $text .= "<b>" . trans("last_auth") . ":</b> " . $user['last_connection'] . "\n";
-            $text .= "<b>" . trans("address") . ":</b> " . $user['address'] . "\n";
-            $text .= $this->buildOnuMessageBlock($onu);
-
-            $inlineKeyboard = [
-                [
-                    [
-                        "text"          => trans("menu_history_sessions"),
-                        "callback_data" => "menuHistorySessions_" . $user['useruid']
-                    ],
-                    [
-                        "text"          => trans("menu_history_payments"),
-                        "callback_data" => "menuHistoryPayments_" . $user['useruid']
-                    ],
-                ],
-                [
-                    [
-                        "text"          => trans("menu_history_tickets"),
-                        "callback_data" => "menuHistoryTickets_" . $user['useruid']
-                    ],
-                    [
-                        "text"          => trans("menu_history_auths"),
-                        "callback_data" => "menuHistoryAuths_" . $user['useruid']
-                    ]
-                ],
-                [
-                    [
-                        "text"          => trans("menu_history_logs"),
-                        "callback_data" => "menuHistoryLogs_" . $user['useruid']
-                    ],
-                    [
-                        "text"          => trans("menu_user_kick"),
-                        "callback_data" => "menuUserKick_" . $user['useruid']
-                    ]
-                ],
-                [
-                    [
-                        "text"          => trans("menu_services"),
-                        "callback_data" => "menuServices_" . $user['useruid']
-                    ],
-                    [
-                        "text" => trans("cabinet_auth"),
-                        "url"  => $cabinet_host . "/?l=" . $user['user'] . "&p=" . $user['password']
-                    ],
-                ],
-            ];
-
-            $onuRefreshRow = $this->buildOnuRefreshButtonRow($onu);
-
-            if (!empty($onuRefreshRow)) {
-                $inlineKeyboard[] = $onuRefreshRow;
-            }
-
-            $inlineKeyboard[] = [
-                [
-                    "text"          => trans("menu_search"),
-                    "callback_data" => "menuSearch"
-                ],
-                [
-                    'text'          => trans("menu_main"),
-                    'callback_data' => "menuMain"
-                ]
-            ];
+            $inlineKeyboard = $this->buildUserCardInlineKeyboard($user, $onu);
 
             $this->sendMessage([
                 'text'         => $text,
@@ -534,14 +455,14 @@ abstract class Command extends CommandHandler
 
         if ($page > 1) {
             $navigationButtons[] = [
-                'text'          => '⬅️ Prev',
+                    'text'          => trans('pagination_prev'),
                 'callback_data' => 'menuSearchPage_' . ($page - 1),
             ];
         }
 
         if ($page < $totalPages) {
             $navigationButtons[] = [
-                'text'          => 'Next ➡️',
+                    'text'          => trans('pagination_next'),
                 'callback_data' => 'menuSearchPage_' . ($page + 1),
             ];
         }
@@ -571,7 +492,7 @@ abstract class Command extends CommandHandler
         ];
 
         $this->sendMessage([
-            'text'         => "Found: {$total}. Page {$page}/{$totalPages}",
+            'text'         => trans('search_results_page', ['total' => $total, 'page' => $page, 'pages' => $totalPages]),
             'parse_mode'   => 'HTML',
             'reply_markup' => [
                 'inline_keyboard' => $keyboard
@@ -693,8 +614,8 @@ abstract class Command extends CommandHandler
         }
 
         $lines[] = '';
-        $lines[] = '🔌 LAN: ' . $this->escapeHtml($lanStatus ?? '-');
-        $lines[] = 'MAC: ' . $this->escapeHtml($macState ?? '-');
+        $lines[] = '🔌 ' . trans('common_label_lan') . ': ' . $this->escapeHtml($lanStatus ?? '-');
+        $lines[] = trans('common_label_mac') . ': ' . $this->escapeHtml($macState ?? '-');
 
         if ($location !== null || !empty($onu['description'])) {
             $lines[] = '';
@@ -731,6 +652,111 @@ abstract class Command extends CommandHandler
         ];
     }
 
+    protected function buildUserCardInlineKeyboard(array $user, ?array $onu): array
+    {
+        $cabinetHost = (string)config('services.mikbill.cabinet_host');
+
+        $inlineKeyboard = [
+            [
+                [
+                    'text' => trans('menu_history_sessions'),
+                    'callback_data' => 'menuHistorySessions_' . $user['useruid'],
+                ],
+                [
+                    'text' => trans('menu_history_payments'),
+                    'callback_data' => 'menuHistoryPayments_' . $user['useruid'],
+                ],
+            ],
+            [
+                [
+                    'text' => trans('menu_history_tickets'),
+                    'callback_data' => 'menuHistoryTickets_' . $user['useruid'],
+                ],
+                [
+                    'text' => trans('menu_history_auths'),
+                    'callback_data' => 'menuHistoryAuths_' . $user['useruid'],
+                ],
+            ],
+            [
+                [
+                    'text' => trans('menu_history_logs'),
+                    'callback_data' => 'menuHistoryLogs_' . $user['useruid'],
+                ],
+                [
+                    'text' => trans('menu_user_kick'),
+                    'callback_data' => 'menuUserKick_' . $user['useruid'],
+                ],
+            ],
+            [
+                [
+                    'text' => trans('menu_services'),
+                    'callback_data' => 'menuServices_' . $user['useruid'],
+                ],
+                [
+                    'text' => trans('cabinet_auth'),
+                    'url' => $cabinetHost . '/?l=' . $user['user'] . '&p=' . $user['password'],
+                ],
+            ],
+        ];
+
+        $onuRefreshRow = $this->buildOnuRefreshButtonRow($onu);
+
+        if (!empty($onuRefreshRow)) {
+            $inlineKeyboard[] = $onuRefreshRow;
+        }
+
+        $inlineKeyboard[] = [
+            [
+                'text' => trans('menu_search'),
+                'callback_data' => 'menuSearch',
+            ],
+            [
+                'text' => trans('menu_main'),
+                'callback_data' => 'menuMain',
+            ],
+        ];
+
+        return $inlineKeyboard;
+    }
+
+    protected function buildUserCardMessage(array $user, ?array $onu, array $systemOptions = []): string
+    {
+        $status = $this->resolveUserStatus($user['state'] ?? null);
+        $currency = isset($systemOptions['data'][0]['UE']) ? (string)$systemOptions['data'][0]['UE'] : 'грн.';
+
+        $text = '<b>' . trans('user_info') . '</b>  ' . "\n";
+        $text .= '<b>' . trans('login') . ':</b> ' . ($user['user'] ?? '') . "\n";
+        $text .= '<b>' . trans('password') . ':</b> <tg-spoiler>' . htmlspecialchars((string)($user['password'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</tg-spoiler>' . "\n";
+        $text .= '<b>' . trans('uid') . ':</b>' . ($user['useruid'] ?? '') . " \n";
+        $text .= '<b>' . trans('contract') . ':</b>' . ($user['numdogovor'] ?? '') . " \n";
+        $text .= '<b>' . trans('fio') . ':</b> ' . ($user['fio'] ?? '') . "\n";
+        $text .= '<b>' . trans('tariff') . ':</b> ' . ($user['tarif'] ?? '') . "\n";
+        $text .= '<b>' . trans('phone_mob') . '</b> ' . ($user['mob_tel'] ?? '') . "\n";
+        $text .= '<b>' . trans('phone_sms') . ':</b> ' . ($user['sms_tel'] ?? '') . "\n";
+        $text .= '<b>' . trans('deposit') . ':</b> ' . $this->formatMoney($user['deposit'] ?? 0) . ' ' . $currency . " \n";
+        $text .= '<b>' . trans('credit') . ':</b> ' . $this->formatMoney($user['credit'] ?? 0) . ' ' . $currency . " \n";
+        $text .= '<b>' . trans('user_label_framed_ip') . ':</b> ' . ($user['framed_ip'] ?? '') . "\n";
+        $text .= '<b>' . trans('user_label_local_ip') . ':</b> ' . ($user['local_ip'] ?? '') . "\n";
+        $text .= '<b>' . trans('user_label_local_mac') . ':</b> ' . (($user['local_mac'] ?? '') !== '' ? $user['local_mac'] : '-') . "\n";
+        $text .= '<b>' . trans('internet') . ':</b> ' . (!empty($user['blocked']) ? '🚫' : '✅') . "\n";
+        $text .= '<b>' . trans('user_label_online') . ':</b> ' . (!empty($user['online']) ? '✅' : '🚫') . "\n";
+        $text .= '<b>' . trans('status') . ':</b> ' . $status . "\n";
+        $text .= '<b>' . trans('last_auth') . ':</b> ' . ($user['last_connection'] ?? '') . "\n";
+        $text .= '<b>' . trans('address') . ':</b> ' . ($user['address'] ?? '') . "\n";
+        $text .= $this->buildOnuMessageBlock($onu);
+
+        return $text;
+    }
+
+    protected function extractUserUidFromMessageText(string $messageText): ?int
+    {
+        if (preg_match('/(?:^|\n)UID:\s*(\d+)/u', $messageText, $matches) === 1) {
+            return (int)$matches[1];
+        }
+
+        return null;
+    }
+
     protected function buildSwitchPortMessageBlock(array $data): string
     {
         $lines = [];
@@ -747,8 +773,8 @@ abstract class Command extends CommandHandler
         $this->addPlainLine($lines, trans('access_port_label_type'), $data['interface_type'] ?? null);
 
         $lines[] = '';
-        $lines[] = '🔌 LAN: ' . $this->escapeHtml($lanStatus ?? '-');
-        $lines[] = 'MAC: ' . $this->escapeHtml($macState ?? '-');
+        $lines[] = '🔌 ' . trans('common_label_lan') . ': ' . $this->escapeHtml($lanStatus ?? '-');
+        $lines[] = trans('common_label_mac') . ': ' . $this->escapeHtml($macState ?? '-');
 
         if ($location !== null || !empty($data['description'])) {
             $lines[] = '';
@@ -777,8 +803,8 @@ abstract class Command extends CommandHandler
         $this->addPlainLine($lines, trans('mac_found_label_type'), $data['interface_type'] ?? null);
 
         $lines[] = '';
-        $lines[] = '🔌 LAN: -';
-        $lines[] = 'MAC: ' . $this->escapeHtml(trans('yes'));
+        $lines[] = '🔌 ' . trans('common_label_lan') . ': -';
+        $lines[] = trans('common_label_mac') . ': ' . $this->escapeHtml(trans('yes'));
 
         if ($location !== null || !empty($data['description'])) {
             $lines[] = '';
@@ -887,20 +913,23 @@ abstract class Command extends CommandHandler
     protected function replaceOnuBlock(string $messageText, string $onuBlock): string
     {
         $position = false;
-        $markers = [
-            "\n📡 <b>" . $this->escapeHtml(trans('onu_block_title')) . "</b>",
-            "\n📡 " . trans('onu_block_title'),
-            "\n🔌 <b>" . $this->escapeHtml(trans('access_port_block_title')) . "</b>",
-            "\n🔌 " . trans('access_port_block_title'),
-            "\n🔎 <b>" . $this->escapeHtml(trans('mac_found_block_title')) . "</b>",
-            "\n🔎 " . trans('mac_found_block_title'),
-            "\n📡 <b>ONU / ONT</b>",
-            "\n📡 ONU / ONT",
-            "\n🔌 <b>Порт доступу</b>",
-            "\n🔌 Порт доступу",
-            "\n🔎 <b>MAC знайдено</b>",
-            "\n🔎 MAC знайдено",
-        ];
+        $markers = [];
+        $locales = ['uk', 'ru', 'en'];
+
+        foreach ($locales as $locale) {
+            $onuTitle = (string)trans('onu_block_title', [], $locale);
+            $accessPortTitle = (string)trans('access_port_block_title', [], $locale);
+            $macFoundTitle = (string)trans('mac_found_block_title', [], $locale);
+
+            $markers[] = "\n📡 <b>" . $this->escapeHtml($onuTitle) . "</b>";
+            $markers[] = "\n📡 " . $onuTitle;
+            $markers[] = "\n🔌 <b>" . $this->escapeHtml($accessPortTitle) . "</b>";
+            $markers[] = "\n🔌 " . $accessPortTitle;
+            $markers[] = "\n🔎 <b>" . $this->escapeHtml($macFoundTitle) . "</b>";
+            $markers[] = "\n🔎 " . $macFoundTitle;
+        }
+
+        $markers = array_values(array_unique($markers));
 
         foreach ($markers as $marker) {
             $found = strpos($messageText, $marker);

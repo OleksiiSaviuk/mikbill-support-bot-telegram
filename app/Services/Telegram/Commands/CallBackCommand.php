@@ -98,10 +98,28 @@ class CallBackCommand extends Command
             return;
         }
 
-        $updatedText = $this->replaceOnuBlock($currentText, $onuBlock);
+        $updatedText = null;
         $replyMarkup = null;
+        $userUid = $this->extractUserUidFromMessageText($currentText);
 
-        if (isset($message->reply_markup)) {
+        if ($userUid !== null) {
+            $api = new API();
+            $user = $api->getUserMB($userUid);
+
+            if (!empty($user)) {
+                $systemOptions = $api->getSystemOptions();
+                $updatedText = $this->buildUserCardMessage($user, $onu, $systemOptions);
+                $replyMarkup = [
+                    'inline_keyboard' => $this->buildUserCardInlineKeyboard($user, $onu),
+                ];
+            }
+        }
+
+        if ($updatedText === null) {
+            $updatedText = $this->replaceOnuBlock($currentText, $onuBlock);
+        }
+
+        if ($replyMarkup === null && isset($message->reply_markup)) {
             $replyMarkup = json_decode(json_encode($message->reply_markup), true);
         }
 
@@ -242,8 +260,8 @@ class CallBackCommand extends Command
 
             $history = isset($result['data'][0]['stattraf']) ? $result['data'][0]['stattraf'] : [];
 
-            $text = "История ceccий: \n\n";
-            $text .= "<pre> " . Helpers::str_pad_unicode('Start time', 20) . " | " . Helpers::str_pad_unicode('Stop time', 20) . " | " . Helpers::str_pad_unicode('Time on', 15) . "</pre>\n";
+            $text = trans('history_sessions_title') . "\n\n";
+            $text .= "<pre> " . Helpers::str_pad_unicode(trans('history_table_start_time'), 20) . " | " . Helpers::str_pad_unicode(trans('history_table_stop_time'), 20) . " | " . Helpers::str_pad_unicode(trans('history_table_time_on'), 15) . "</pre>\n";
             $text .= "<pre> " . Helpers::str_pad_unicode('-', 20, '-') . " + " . Helpers::str_pad_unicode('-', 20, '-') . " + " . Helpers::str_pad_unicode('-', 15, '-') . "</pre>\n";
             foreach ($history as $row) {
                 $text .= "<pre> " . Helpers::str_pad_unicode($row['start_time'], 20) . " | " . Helpers::str_pad_unicode($row['stop_time'], 20) . " | " . Helpers::str_pad_unicode($row['time_on'], 15) . "</pre>\n";
@@ -345,7 +363,7 @@ class CallBackCommand extends Command
             $history = isset($result['data'][0]['statpay']) ? $result['data'][0]['statpay'] : [];
 
             $text = trans("history_payment") . " \n\n";
-            $text .= "<pre> " . Helpers::str_pad_unicode('Date', 20) . " | " . Helpers::str_pad_unicode('Summa', 10) . " | " . Helpers::str_pad_unicode('Type', 40) . " </pre>\n";
+            $text .= "<pre> " . Helpers::str_pad_unicode(trans('history_table_date'), 20) . " | " . Helpers::str_pad_unicode(trans('history_table_amount'), 10) . " | " . Helpers::str_pad_unicode(trans('history_table_type'), 40) . " </pre>\n";
             $text .= "<pre> " . Helpers::str_pad_unicode('-', 20, '-') . " + " . Helpers::str_pad_unicode('-', 10, '-') . " + " . Helpers::str_pad_unicode('-', 40, '-') . " </pre>\n";
             foreach ($history as $row) {
                 $text .= "<pre> " . Helpers::str_pad_unicode($row['date'], 20) . " | " . Helpers::str_pad_unicode($this->formatMoney($row['summa']), 10) . " | " . Helpers::str_pad_unicode($row['bughtypeid'], 40) . " </pre>\n";
@@ -386,7 +404,7 @@ class CallBackCommand extends Command
             $history = isset($result['data'][0]['tickets']) ? $result['data'][0]['tickets'] : [];
 
             $text = trans("history_tickets") . " \n\n";
-            $text .= "<pre> " . Helpers::str_pad_unicode('Date create', 20) . " | " . Helpers::str_pad_unicode('Category', 25) . " | " . Helpers::str_pad_unicode('Status', 40) . " </pre>\n";
+            $text .= "<pre> " . Helpers::str_pad_unicode(trans('history_table_date_create'), 20) . " | " . Helpers::str_pad_unicode(trans('history_table_category'), 25) . " | " . Helpers::str_pad_unicode(trans('history_table_status'), 40) . " </pre>\n";
             $text .= "<pre> " . Helpers::str_pad_unicode('-', 20, '-') . " + " . Helpers::str_pad_unicode('-', 25, '-') . " + " . Helpers::str_pad_unicode('-', 40, '-') . " </pre>\n";
             foreach ($history as $row) {
                 $text .= "<pre> " . Helpers::str_pad_unicode($row['creationdate'], 20) . " | " . Helpers::str_pad_unicode($row['categoryname'], 25) . " | " . Helpers::str_pad_unicode($row['statustypename'], 40) . " </pre>\n";
@@ -428,7 +446,7 @@ class CallBackCommand extends Command
             $history = isset($result['data'][0]['postauth']) ? $result['data'][0]['postauth'] : [];
 
             $text = trans("history_auths") . " \n\n";
-            $text .= "<pre> " . Helpers::str_pad_unicode('Date auth', 20) . " | " . Helpers::str_pad_unicode('Calling Station Id', 20) . " | " . Helpers::str_pad_unicode('Message', 40) . " </pre>\n";
+            $text .= "<pre> " . Helpers::str_pad_unicode(trans('history_table_date_auth'), 20) . " | " . Helpers::str_pad_unicode(trans('history_table_calling_station_id'), 20) . " | " . Helpers::str_pad_unicode(trans('history_table_message'), 40) . " </pre>\n";
             $text .= "<pre> " . Helpers::str_pad_unicode('-', 20, '-') . " + " . Helpers::str_pad_unicode('-', 20, '-') . " + " . Helpers::str_pad_unicode('-', 40, '-') . " </pre>\n";
             foreach ($history as $row) {
                 $text .= "<pre> " . Helpers::str_pad_unicode($row['authdate'], 20) . " | " . Helpers::str_pad_unicode($row['callingstationid'], 20) . " | " . Helpers::str_pad_unicode($row['replymessage'], 40) . " </pre>\n";
@@ -470,7 +488,7 @@ class CallBackCommand extends Command
             $history = isset($result['data'][0]['logs']) ? $result['data'][0]['logs'] : [];
 
             $text = trans("history_logs") . " \n\n";
-            $text .= "<pre> " . Helpers::str_pad_unicode('Date', 20) . " | " . Helpers::str_pad_unicode('Value', 40) . " | " . Helpers::str_pad_unicode('Old', 20) . " | " . Helpers::str_pad_unicode('New', 20) . " </pre>\n";
+            $text .= "<pre> " . Helpers::str_pad_unicode(trans('history_table_date'), 20) . " | " . Helpers::str_pad_unicode(trans('history_table_value'), 40) . " | " . Helpers::str_pad_unicode(trans('history_table_old'), 20) . " | " . Helpers::str_pad_unicode(trans('history_table_new'), 20) . " </pre>\n";
             $text .= "<pre> " . Helpers::str_pad_unicode('-', 20, '-') . " + " . Helpers::str_pad_unicode('-', 40, '-') . " + " . Helpers::str_pad_unicode('-', 20, '-') . " + " . Helpers::str_pad_unicode('-', 20, '-') . " </pre>\n";
             foreach ($history as $row) {
                 $text .= "<pre> " . Helpers::str_pad_unicode($row['date'], 20) . " | " . Helpers::str_pad_unicode($row['valuename'], 40) . " | " . Helpers::str_pad_unicode($row['oldvalue'], 20) . " | " . Helpers::str_pad_unicode($row['newvalue'], 20) . " </pre>\n";
