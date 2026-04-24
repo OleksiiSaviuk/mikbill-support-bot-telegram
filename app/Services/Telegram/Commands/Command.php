@@ -391,7 +391,7 @@ abstract class Command extends CommandHandler
 
             $text = "<b>" . trans("user_info") . "</b>  \n";
             $text .= "<b>" . trans("login") . ":</b> " . $user['user'] . "\n";
-            $text .= "<b>" . trans("password") . ":</b> " . $user['password'] . "\n";
+            $text .= "<b>" . trans("password") . ":</b> <tg-spoiler>" . htmlspecialchars((string)($user['password'] ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "</tg-spoiler>\n";
             $text .= "<b>" . trans("uid") . ":</b>" . $user['useruid'] . " \n";
             $text .= "<b>" . trans("contract") . ":</b>" . $user['numdogovor'] . " \n";
             $text .= "<b>" . trans("fio") . ":</b> " . $user['fio'] . "\n";
@@ -402,6 +402,7 @@ abstract class Command extends CommandHandler
             $text .= "<b>" . trans("credit") . ":</b> " . $this->formatMoney($user['credit']) . " " . (isset($systemOptions['data'][0]['UE']) ? $systemOptions['data'][0]['UE'] : 'грн.') . " \n";
             $text .= "<b>Framed IP:</b> " . $user['framed_ip'] . "\n";
             $text .= "<b>Local IP:</b> " . $user['local_ip'] . "\n";
+            $text .= "<b>Local MAC:</b> " . ($user['local_mac'] ?? '-') . "\n";
             $text .= "<b>" . trans("internet") . ":</b> " . ($user['blocked'] ? '🚫' : '✅') . "\n";
             $text .= "<b>On-line:</b> " . ($user['online'] ? '✅' : '🚫') . "\n";
             $text .= "<b>" . trans("status") . ":</b> " . $status . "\n";
