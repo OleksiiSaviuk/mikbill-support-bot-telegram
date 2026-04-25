@@ -114,7 +114,6 @@
 	"onu_event_up": "→ came up",
 	"onu_label_uni": "UNI",
 	"onu_label_mac_fdb": "MAC in FDB",
-	"onu_label_last_mac_seen": "Last MAC seen",
 	"onu_label_vlan": "VLAN",
 	"onu_label_summary": "Summary",
 	"onu_refresh_button": "🔄 Refresh ONU",

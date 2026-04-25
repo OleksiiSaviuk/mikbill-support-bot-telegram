@@ -183,7 +183,6 @@ class API
                 'device_model_type' => $selected['device_model_type'] ?? null,
                 'parent_bind_key' => $selected['parent_bind_key'] ?? null,
                 'bind_key' => $selected['bind_key'] ?? null,
-                'client_mac_last_seen' => $selected['client_mac_last_seen'] ?? null,
             ];
         }
 
@@ -295,12 +294,6 @@ class API
                 $this->findByKeyRecursive($search['_raw'] ?? [], ['online_duration', 'online_time', 'up_time', 'uptime']),
                 $search['online_duration'] ?? null,
             ])),
-            'client_mac_last_seen' => $this->stringOrNull($this->firstNotEmpty([
-                $this->findByKeyRecursive($diagRoot, ['client_mac_last_seen', 'last_mac_seen', 'mac_last_seen', 'fdb_last_seen', 'last_seen_mac']),
-                $this->findByKeyRecursive($search['_raw'] ?? [], ['client_mac_last_seen', 'last_mac_seen', 'mac_last_seen', 'fdb_last_seen', 'last_seen_mac']),
-                $search['client_mac_last_seen'] ?? null,
-            ])),
-
             'uni_ports' => $uniPorts,
             'client_mac_found_in_fdb' => $clientMacFoundInFdb,
             'vlan' => $this->stringOrNull($this->firstNotEmpty([
@@ -425,10 +418,6 @@ class API
             'device_model_type' => $deviceModelType,
             'parent_bind_key' => $this->stringOrNull($row['parent_bind_key'] ?? null),
             'bind_key' => $this->stringOrNull($row['bind_key'] ?? null),
-            'client_mac_last_seen' => $this->stringOrNull($this->firstNotEmpty([
-                $this->findByKeyRecursive($row, ['client_mac_last_seen', 'last_mac_seen', 'mac_last_seen', 'fdb_last_seen', 'last_seen_mac']),
-                $row['last_seen'] ?? null,
-            ])),
             'client_mac' => $normalizedMac,
             '_raw' => $row,
         ];

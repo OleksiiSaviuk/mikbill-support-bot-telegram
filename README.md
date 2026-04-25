@@ -145,6 +145,8 @@ TELEGRAM_HISTORY_DELETE_BATCH_SIZE=25
 # Опциональный код страны по умолчанию для локальных номеров без +
 # Примеры: 38 (UA), 48 (PL), 1 (US/CA)
 TELEGRAM_DEFAULT_PHONE_COUNTRY_CODE=
+# Часовой пояс для отображения времени в карточке (ONU-события, даты)
+APP_TIMEZONE=Europe/Kiev
 
 MIKBILL_CABINET_HOST="https://stat.my-domen.ru"
 MIKBILL_HOST="https://admin.my-domen.ru"
@@ -182,6 +184,19 @@ TELEGRAM_DEFAULT_PHONE_COUNTRY_CODE=38
 ```
 
 Если переменная не задана, неоднозначные локальные номера выводятся без принудительного изменения.
+
+### 3.5 Часовой пояс
+
+Время в карточке абонента (ONU-события, даты подъёма/падения) отображается с учётом часового пояса, заданного через `APP_TIMEZONE`.
+
+Значение по умолчанию: `Europe/Kiev`.
+
+```shell script
+APP_TIMEZONE=Europe/Kiev
+```
+
+Переменная применяется как для PHP/Laravel, так и для системного времени Docker-контейнеров (через `TZ` в `docker-compose.yml`).
+Валидные значения — из списка [PHP timezones](https://www.php.net/manual/en/timezones.php).
 
 
 ### 3.2 Ключ приложения
@@ -272,6 +287,8 @@ TELEGRAM_HISTORY_TRACK_LIMIT=5000
 TELEGRAM_HISTORY_PURGE_INTERVAL_SECONDS=300
 TELEGRAM_HISTORY_DELETE_BATCH_SIZE=25
 TELEGRAM_DEFAULT_PHONE_COUNTRY_CODE=
+# Часовой пояс для отображения дат/времени (ONU-события и т.п.)
+APP_TIMEZONE=Europe/Kiev
 
 MIKBILL_HOST="https://admin.my-domen.ru"
 MIKBILL_CABINET_HOST="https://stat.my-domen.ru"

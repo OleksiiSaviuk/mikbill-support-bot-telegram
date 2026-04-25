@@ -114,7 +114,6 @@
 	"onu_event_up": "→ поднялась",
 	"onu_label_uni": "UNI",
 	"onu_label_mac_fdb": "MAC в FDB",
-	"onu_label_last_mac_seen": "Последний MAC seen",
 	"onu_label_vlan": "VLAN",
 	"onu_label_summary": "Вывод",
 	"onu_refresh_button": "🔄 Обновить ONU",

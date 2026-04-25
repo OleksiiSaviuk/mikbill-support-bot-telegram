@@ -591,7 +591,6 @@ abstract class Command extends CommandHandler
         $lastUp = $this->formatOnuEventTime($onu['last_reg'] ?? null);
         $lastDownReason = $onu['last_down_reason'] ?? null;
         $onuOnlineDuration = $this->resolveOnuOnlineDuration($onu);
-        $macLastSeen = $this->formatOnuEventTime($onu['client_mac_last_seen'] ?? null);
 
         $status = $onu['status'] ?? null;
         $statusIcon = ($status !== null && stripos($status, 'online') !== false) ? '✅' : '❌';
@@ -606,11 +605,11 @@ abstract class Command extends CommandHandler
         if ($lastDownReason !== null || $lastDown !== null || $lastUp !== null || $onuOnlineDuration !== null) {
             $lines[] = '';
             $this->addPlainLine($lines, trans('onu_label_last_down_reason'), $lastDownReason);
-            if ($lastDown !== null) {
-                $lines[] = $this->escapeHtml($lastDown) . ' ' . trans('onu_event_down');
-            }
             if ($lastUp !== null) {
                 $lines[] = $this->escapeHtml($lastUp) . ' ' . trans('onu_event_up');
+            }
+            if ($lastDown !== null) {
+                $lines[] = $this->escapeHtml($lastDown) . ' ' . trans('onu_event_down');
             }
             $this->addPlainLine($lines, trans('onu_label_online_duration'), $onuOnlineDuration);
         }
@@ -618,9 +617,6 @@ abstract class Command extends CommandHandler
         $lines[] = '';
         $lines[] = trans('common_label_lan') . ': ' . $this->escapeHtml($lanStatus ?? '-');
         $lines[] = trans('common_label_mac') . ': ' . $this->escapeHtml($macState ?? '-');
-        if (($onu['client_mac_found_in_fdb'] ?? null) === false) {
-            $this->addPlainLine($lines, trans('onu_label_last_mac_seen'), $macLastSeen);
-        }
 
         if ($location !== null || !empty($onu['description'])) {
             $lines[] = '';
@@ -784,7 +780,6 @@ abstract class Command extends CommandHandler
         $lines[] = '';
         $lines[] =  trans('common_label_lan') . ': ' . $this->escapeHtml($lanStatus ?? '-');
         $lines[] = trans('common_label_mac') . ': ' . $this->escapeHtml($macState ?? '-');
-        $this->addPlainLine($lines, trans('onu_label_last_mac_seen'), $this->formatOnuEventTime($data['client_mac_last_seen'] ?? null));
 
         if ($location !== null || !empty($data['description'])) {
             $lines[] = '';
@@ -819,7 +814,6 @@ abstract class Command extends CommandHandler
         $lines[] = '';
         $lines[] =  trans('common_label_lan') . ': -';
         $lines[] = trans('common_label_mac') . ': ' . $this->escapeHtml(trans('yes'));
-        $this->addPlainLine($lines, trans('onu_label_last_mac_seen'), $this->formatOnuEventTime($data['client_mac_last_seen'] ?? null));
 
         if ($location !== null || !empty($data['description'])) {
             $lines[] = '';
