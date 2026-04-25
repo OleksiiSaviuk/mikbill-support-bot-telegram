@@ -600,7 +600,7 @@ abstract class Command extends CommandHandler
         if ($status !== null) {
             $lines[] = trans('onu_label_status') . ': ' . $statusIcon . ' ' . $this->escapeHtml($status);
         }
-        $this->addPlainLine($lines, 'RX', $this->formatOnuMetric($onu['rx'] ?? null, ' dBm')); // RX — технічна абревіатура, без перекладу
+        $this->addPlainLine($lines, 'RX', $this->formatOnuMetric($onu['rx'] ?? null, ' dBm')); // RX is a technical abbreviation — no translation needed
 
         if ($lastDownReason !== null || $lastDown !== null || $lastUp !== null || $onuOnlineDuration !== null) {
             $lines[] = '';

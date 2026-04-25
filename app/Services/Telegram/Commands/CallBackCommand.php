@@ -38,7 +38,7 @@ class CallBackCommand extends Command
 
         if (isset($params[0]) and method_exists(self::class, $params[0])) {
             $method = $params[0];
-            $this->$method($params); // вызываем метод
+            $this->$method($params); // dispatch the method
         } else {
 
             $this->sendMessage([
