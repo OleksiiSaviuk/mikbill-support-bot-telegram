@@ -4,6 +4,8 @@
 namespace App\Services\MikBill\Admin;
 
 
+use GuzzleHttp\Client;
+use Illuminate\Support\Facades\Cache;
 use Kagatan\MikBillAdminAPI\AdminAPI;
 
 class API extends AdminAPI
@@ -14,11 +16,42 @@ class API extends AdminAPI
 
     public function __construct()
     {
-        $this->host = config('services.mikbill.host');
+        $this->host  = config('services.mikbill.host');
         $this->login = config('services.mikbill.login');
-        $this->pass = config('services.mikbill.pass');
+        $this->pass  = config('services.mikbill.pass');
 
-        parent::__construct($this->login, $this->pass, $this->host);
+        // Bypass parent constructor — we control auth and client ourselves.
+        $this->client = new Client([
+            'base_uri'        => $this->host,
+            'cookies'         => true,
+            'verify'          => false,
+            'connect_timeout' => 5,
+            'timeout'         => 15,
+        ]);
+
+        $cachedToken = Cache::get('mikbill_jwt_token');
+
+        if ($cachedToken) {
+            $ref = new \ReflectionProperty(\Kagatan\MikBillAdminAPI\AdminAPI::class, '_token');
+            $ref->setAccessible(true);
+            $ref->setValue($this, $cachedToken);
+        } else {
+            $this->_authenticate();
+        }
+    }
+
+    private function _authenticate(): void
+    {
+        $params = [
+            'login'    => $this->login,
+            'password' => md5($this->pass),
+        ];
+
+        $response = $this->authBilling($params);
+
+        if (isset($response['data']['jwt'])) {
+            Cache::put('mikbill_jwt_token', $response['data']['jwt'], now()->addMinutes(55));
+        }
     }
 
     /**
@@ -42,6 +75,23 @@ class API extends AdminAPI
                 break;
             case 'phone':
                 return $this->searchByPhone($value);
+                break;
+            case 'all':
+                $results = array_merge(
+                    $this->searchByField('uid', 'uid', $value),
+                    $this->searchByField('user', 'user', $value),
+                    $this->searchByField('uid', 'numdogovor', $value),
+                    $this->searchByPhone($value)
+                );
+
+                $unique = [];
+                foreach ($results as $user) {
+                    if (isset($user['useruid'])) {
+                        $unique[$user['useruid']] = $user;
+                    }
+                }
+
+                return array_values($unique);
         }
 
         return false;

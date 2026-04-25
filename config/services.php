@@ -35,6 +35,12 @@ return [
         'cabinet_host' => env('MIKBILL_CABINET_HOST'),
         'login'        => env('MIKBILL_LOGIN'),
         'pass'         => env('MIKBILL_PASSWORD'),
-    ]
+    ],
+
+    'wildcore' => [
+        'enabled' => env('WILDCORE_ENABLED', 'false'),
+        'url'     => env('WILDCORE_URL'),
+        'api_key' => env('WILDCORE_API_KEY'),
+    ],
 
 ];

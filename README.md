@@ -11,6 +11,9 @@
  - просмотр истории сессий
  - просмотр услуг
  - вход в ЛК 
+ - интеграция с Wildcore (диагностика ONU/ONT и порта доступа)
+ - кнопка обновления данных Wildcore прямо в карточке абонента
+ - определение типа подключения: ONU / порт коммутатора / неизвестно
  
 ### Changelog:
 #### 23.04.2022
@@ -125,22 +128,81 @@ DirectoryIndex /public/index.php
 APP_URL=https://my-domen.ru
 TELEGRAM_BOT_TOKEN="11111:xxxxxxxxxxxx"
 TELEGRAM_BOT_NAME="name_bot"
+# Список ID пользователей Telegram, которым разрешён доступ (в виде JSON-массива)
 TELEGRAM_BOT_ALLOWED_ID="[1234345, 4789456]"
+# Количество результатов поиска абонентов на одной странице (по умолчанию 5)
+TELEGRAM_SEARCH_PER_PAGE=5
+# Включает автопоиск по номеру из /start payload вида phone_380971234567
+TELEGRAM_ENABLE_START_PHONE_SEARCH=false
+# Количество дней хранения истории сообщений в чате (автоочистка)
+TELEGRAM_HISTORY_RETENTION_DAYS=7
+# Сколько message_id хранить в кеше для последующей автоочистки
+TELEGRAM_HISTORY_TRACK_LIMIT=5000
+# Как часто (в секундах) запускать автоочистку старых сообщений
+TELEGRAM_HISTORY_PURGE_INTERVAL_SECONDS=300
+# Сколько старых сообщений удалять за один проход (для снижения нагрузки)
+TELEGRAM_HISTORY_DELETE_BATCH_SIZE=25
+# Опциональный код страны по умолчанию для локальных номеров без +
+# Примеры: 38 (UA), 48 (PL), 1 (US/CA)
+TELEGRAM_DEFAULT_PHONE_COUNTRY_CODE=
+# Часовой пояс для отображения времени в карточке (ONU-события, даты)
+APP_TIMEZONE=Europe/Kiev
 
 MIKBILL_CABINET_HOST="https://stat.my-domen.ru"
 MIKBILL_HOST="https://admin.my-domen.ru"
 MIKBILL_LOGIN=admin
 MIKBILL_PASSWORD=admin
 
+# Wildcore
+WILDCORE_ENABLED=false
+WILDCORE_URL="https://wildcore.my-domen.ru"
+WILDCORE_API_KEY="your_wildcore_api_key"
+
 ```
 
-### 3.2 JWT и ключи
+### 3.3 Интеграция Wildcore (ONU/ONT)
+
+Если `WILDCORE_ENABLED=true`, в карточке абонента дополнительно отображается блок диагностики:
+
+- для ONU/ONT: статус, RX, последние события, последняя причина падения, LAN/MAC, локация, вывод
+- для порта коммутатора: статус порта, тип, LAN/MAC, локация, вывод
+- для неопределенного типа: технический блок найденного подключения
+- Кнопка `🔄 Wildcore обновить` в карточке обновляет данные из источника `device`
+
+### 3.4 Формат телефонов в карточке абонента
+
+Телефоны в карточке отображаются в международном формате с `+` в начале:
+
+- `+380...` остаётся как есть
+- `00380...` преобразуется в `+380...`
+- номера без кода страны могут быть приведены через `TELEGRAM_DEFAULT_PHONE_COUNTRY_CODE`
+
+Пример:
+
+```shell script
+TELEGRAM_DEFAULT_PHONE_COUNTRY_CODE=38
+```
+
+Если переменная не задана, неоднозначные локальные номера выводятся без принудительного изменения.
+
+### 3.5 Часовой пояс
+
+Время в карточке абонента (ONU-события, даты подъёма/падения) отображается с учётом часового пояса, заданного через `APP_TIMEZONE`.
+
+Значение по умолчанию: `Europe/Kiev`.
+
+```shell script
+APP_TIMEZONE=Europe/Kiev
+```
+
+Переменная применяется как для PHP/Laravel, так и для системного времени Docker-контейнеров (через `TZ` в `docker-compose.yml`).
+Валидные значения — из списка [PHP timezones](https://www.php.net/manual/en/timezones.php).
+
+
+### 3.2 Ключ приложения
 
 ```shell script
 php artisan key:generate
-
-php artisan jwt:secret
-
 ```
 
 ### 4. Webhook
@@ -179,4 +241,120 @@ APP_LOCALE=en
 Файлы локализаций находятся по пути:
 ```shell script
 /resources/lang/ru.json
+```
+
+### Запуск через Docker Compose
+
+В проект добавлен `docker-compose.yml` c сервисами:
+
+- `app` (Apache + PHP 8.1)
+- `mysql` (MySQL 8)
+
+Локальный Nginx в compose не используется.
+Если у вас уже есть отдельный reverse proxy (Nginx/Traefik/Caddy), проксируйте его на порт этого хоста:
+
+- `8088` -> HTTP Laravel
+
+1. Подготовить env-файл:
+
+```shell script
+cp .env.example .env
+```
+
+2. Для production окружения проверьте (или добавьте) в `.env`:
+
+```shell script
+APP_ENV=production
+APP_DEBUG=false
+APP_URL=https://your-domain.tld
+
+DB_CONNECTION=mysql
+DB_HOST=mysql
+DB_PORT=3306
+DB_DATABASE=your_db_name
+# DB_USERNAME не должен быть root — MySQL контейнер создаст этого пользователя автоматически
+DB_USERNAME=your_db_user
+DB_PASSWORD=strong_password
+DB_ROOT_PASSWORD=strong_root_password
+
+TELEGRAM_BOT_TOKEN="11111:xxxxxxxxxxxx"
+TELEGRAM_BOT_NAME="name_bot"
+TELEGRAM_BOT_ALLOWED_ID="[1234345, 4789456]"
+TELEGRAM_SEARCH_PER_PAGE=5
+TELEGRAM_ENABLE_START_PHONE_SEARCH=false
+TELEGRAM_HISTORY_RETENTION_DAYS=7
+TELEGRAM_HISTORY_TRACK_LIMIT=5000
+TELEGRAM_HISTORY_PURGE_INTERVAL_SECONDS=300
+TELEGRAM_HISTORY_DELETE_BATCH_SIZE=25
+TELEGRAM_DEFAULT_PHONE_COUNTRY_CODE=
+# Часовой пояс для отображения дат/времени (ONU-события и т.п.)
+APP_TIMEZONE=Europe/Kiev
+
+MIKBILL_HOST="https://admin.my-domen.ru"
+MIKBILL_CABINET_HOST="https://stat.my-domen.ru"
+MIKBILL_LOGIN=admin
+MIKBILL_PASSWORD=admin
+
+WILDCORE_ENABLED=false
+WILDCORE_URL="https://wildcore.my-domen.ru"
+WILDCORE_API_KEY="your_wildcore_api_key"
+```
+
+### Telegram автоочистка истории
+
+- `TELEGRAM_HISTORY_RETENTION_DAYS` — сколько дней хранить сообщения в чате. По умолчанию: `7`.
+- `TELEGRAM_HISTORY_TRACK_LIMIT` — максимальное количество message_id в кеше для одного чата. По умолчанию: `5000`.
+- `TELEGRAM_HISTORY_PURGE_INTERVAL_SECONDS` — минимальный интервал между запусками автоочистки. По умолчанию: `300`.
+- `TELEGRAM_HISTORY_DELETE_BATCH_SIZE` — сколько старых сообщений удалять за один запуск очистки. По умолчанию: `25`.
+
+Рекомендованные значения для более быстрой работы бота:
+
+```shell script
+TELEGRAM_HISTORY_RETENTION_DAYS=7
+TELEGRAM_HISTORY_TRACK_LIMIT=5000
+TELEGRAM_HISTORY_PURGE_INTERVAL_SECONDS=900
+TELEGRAM_HISTORY_DELETE_BATCH_SIZE=10
+```
+
+3. Запустить контейнеры:
+
+```shell script
+docker compose up -d --build
+```
+
+4. Выполнить инициализацию Laravel:
+
+> **Примечание:** из-за ограничений Docker bind-mounted `.env` невозможна.  
+> Генерируйте ключи с флагом `--show` и вставляйте значения вручную в `.env` на хосте.
+
+```shell script
+# Показать APP_KEY (вставить в .env: APP_KEY=base64:...)
+docker compose exec app php artisan key:generate --show
+
+# Затем перезапустить, чтобы применить новые значения из .env
+docker compose down && docker compose up -d
+
+docker compose exec app php artisan migrate --force
+docker compose exec app php artisan config:cache
+docker compose exec app php artisan route:cache
+```
+
+5. Установить Telegram webhook:
+
+```shell script
+docker compose exec app php artisan telebot:webhook --setup
+```
+
+6. Приложение доступно по адресу:
+
+```shell script
+http://localhost:8088
+```
+
+В production рекомендуется использовать только HTTPS-домен через внешний reverse proxy.
+
+Остановка:
+
+```shell script
+docker compose down
 ```
