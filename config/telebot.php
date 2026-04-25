@@ -59,6 +59,7 @@ return [
             'history_purge_interval_seconds' => env('TELEGRAM_HISTORY_PURGE_INTERVAL_SECONDS', 300),
             'history_delete_batch_size' => env('TELEGRAM_HISTORY_DELETE_BATCH_SIZE', 25),
             'default_phone_country_code' => env('TELEGRAM_DEFAULT_PHONE_COUNTRY_CODE', ''),
+            'timezone' => env('TELEGRAM_TIMEZONE', env('APP_TIMEZONE', 'Europe/Kiev')),
         ],
 
         // 'second_bot' => [

@@ -9,6 +9,8 @@ services:
       - "8088:80"
     env_file:
       - .env
+    environment:
+      TZ: ${TZ:-Europe/Kiev}
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1/"]
       interval: 15s
@@ -28,6 +30,7 @@ services:
     env_file:
       - .env
     environment:
+      TZ: ${TZ:-Europe/Kiev}
       MYSQL_DATABASE: ${DB_DATABASE}
       MYSQL_USER: ${DB_USERNAME}
       MYSQL_PASSWORD: ${DB_PASSWORD}

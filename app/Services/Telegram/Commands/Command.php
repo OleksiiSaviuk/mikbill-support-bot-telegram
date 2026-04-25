@@ -589,6 +589,9 @@ abstract class Command extends CommandHandler
         $macState = $this->resolveMacPresenceText($onu['client_mac_found_in_fdb'] ?? null);
         $lastDown = $this->formatOnuEventTime($onu['last_dereg'] ?? null);
         $lastUp = $this->formatOnuEventTime($onu['last_reg'] ?? null);
+        $lastDownReason = $onu['last_down_reason'] ?? null;
+        $onuOnlineDuration = $this->resolveOnuOnlineDuration($onu);
+        $macLastSeen = $this->formatOnuEventTime($onu['client_mac_last_seen'] ?? null);
 
         $status = $onu['status'] ?? null;
         $statusIcon = ($status !== null && stripos($status, 'online') !== false) ? '✅' : '❌';
@@ -600,22 +603,24 @@ abstract class Command extends CommandHandler
         }
         $this->addPlainLine($lines, 'RX', $this->formatOnuMetric($onu['rx'] ?? null, ' dBm')); // RX — технічна абревіатура, без перекладу
 
-        if ($lastDown !== null || $lastUp !== null) {
+        if ($lastDownReason !== null || $lastDown !== null || $lastUp !== null || $onuOnlineDuration !== null) {
             $lines[] = '';
+            $this->addPlainLine($lines, trans('onu_label_last_down_reason'), $lastDownReason);
             if ($lastDown !== null) {
                 $lines[] = $this->escapeHtml($lastDown) . ' ' . trans('onu_event_down');
             }
             if ($lastUp !== null) {
                 $lines[] = $this->escapeHtml($lastUp) . ' ' . trans('onu_event_up');
             }
-            $this->addPlainLine($lines, trans('onu_label_last_down_reason'), $onu['last_down_reason'] ?? null);
-        } elseif (!empty($onu['last_down_reason'])) {
-            $this->addPlainLine($lines, trans('onu_label_last_down_reason'), $onu['last_down_reason']);
+            $this->addPlainLine($lines, trans('onu_label_online_duration'), $onuOnlineDuration);
         }
 
         $lines[] = '';
         $lines[] = trans('common_label_lan') . ': ' . $this->escapeHtml($lanStatus ?? '-');
         $lines[] = trans('common_label_mac') . ': ' . $this->escapeHtml($macState ?? '-');
+        if (($onu['client_mac_found_in_fdb'] ?? null) === false) {
+            $this->addPlainLine($lines, trans('onu_label_last_mac_seen'), $macLastSeen);
+        }
 
         if ($location !== null || !empty($onu['description'])) {
             $lines[] = '';
@@ -725,6 +730,7 @@ abstract class Command extends CommandHandler
         $currency = isset($systemOptions['data'][0]['UE']) ? (string)$systemOptions['data'][0]['UE'] : 'грн.';
         $mobilePhone = $this->formatPhoneInternational($user['mob_tel'] ?? null);
         $smsPhone = $this->formatPhoneInternational($user['sms_tel'] ?? null);
+        $onlineDuration = $this->resolveUserOnlineDuration($user);
 
         $text = '<b>' . trans('user_info') . '</b>  ' . "\n";
         $text .= '<b>' . trans('login') . ':</b> ' . ($user['user'] ?? '') . "\n";
@@ -738,12 +744,12 @@ abstract class Command extends CommandHandler
         $text .= '<b>' . trans('deposit') . ':</b> ' . $this->formatMoney($user['deposit'] ?? 0) . ' ' . $currency . " \n";
         $text .= '<b>' . trans('credit') . ':</b> ' . $this->formatMoney($user['credit'] ?? 0) . ' ' . $currency . " \n";
         $text .= '<b>' . trans('user_label_framed_ip') . ':</b> ' . ($user['framed_ip'] ?? '') . "\n";
-        $text .= '<b>' . trans('user_label_local_ip') . ':</b> ' . ($user['local_ip'] ?? '') . "\n";
         $text .= '<b>' . trans('user_label_local_mac') . ':</b> ' . (($user['local_mac'] ?? '') !== '' ? $user['local_mac'] : '-') . "\n";
         $text .= '<b>' . trans('internet') . ':</b> ' . (!empty($user['blocked']) ? '❌' : '✅') . "\n";
         $text .= '<b>' . trans('user_label_online') . ':</b> ' . (!empty($user['online']) ? '✅' : '❌') . "\n";
         $text .= '<b>' . trans('status') . ':</b> ' . $status . "\n";
         $text .= '<b>' . trans('last_auth') . ':</b> ' . ($user['last_connection'] ?? '') . "\n";
+        $text .= '<b>' . trans('user_label_online_duration') . ':</b> ' . $this->escapeHtml($onlineDuration ?? '-') . "\n";
         $text .= '<b>' . trans('address') . ':</b> ' . ($user['address'] ?? '') . "\n";
         $text .= $this->buildOnuMessageBlock($onu);
 
@@ -778,6 +784,7 @@ abstract class Command extends CommandHandler
         $lines[] = '';
         $lines[] =  trans('common_label_lan') . ': ' . $this->escapeHtml($lanStatus ?? '-');
         $lines[] = trans('common_label_mac') . ': ' . $this->escapeHtml($macState ?? '-');
+        $this->addPlainLine($lines, trans('onu_label_last_mac_seen'), $this->formatOnuEventTime($data['client_mac_last_seen'] ?? null));
 
         if ($location !== null || !empty($data['description'])) {
             $lines[] = '';
@@ -812,6 +819,7 @@ abstract class Command extends CommandHandler
         $lines[] = '';
         $lines[] =  trans('common_label_lan') . ': -';
         $lines[] = trans('common_label_mac') . ': ' . $this->escapeHtml(trans('yes'));
+        $this->addPlainLine($lines, trans('onu_label_last_mac_seen'), $this->formatOnuEventTime($data['client_mac_last_seen'] ?? null));
 
         if ($location !== null || !empty($data['description'])) {
             $lines[] = '';
@@ -923,13 +931,14 @@ abstract class Command extends CommandHandler
             return null;
         }
 
-        $timestamp = strtotime($raw);
+        try {
+            $timezone = $this->resolveDisplayTimezone();
+            $dateTime = new \DateTimeImmutable($raw, $timezone);
 
-        if ($timestamp === false) {
+            return $dateTime->setTimezone($timezone)->format('d.m.y H:i');
+        } catch (\Throwable $e) {
             return $raw;
         }
-
-        return date('d.m.y H:i', $timestamp);
     }
 
     protected function replaceOnuBlock(string $messageText, string $onuBlock): string
@@ -978,6 +987,136 @@ abstract class Command extends CommandHandler
         }
 
         return trim((string)$value) !== '' ? trim((string)$value) . $suffix : null;
+    }
+
+    protected function resolveDisplayTimezone(): \DateTimeZone
+    {
+        $timezoneName = (string)config('telebot.bots.bot.timezone', config('app.timezone', 'UTC'));
+
+        try {
+            return new \DateTimeZone($timezoneName);
+        } catch (\Throwable $e) {
+            return new \DateTimeZone('UTC');
+        }
+    }
+
+    protected function formatDurationSeconds(int $seconds): string
+    {
+        $seconds = max(0, $seconds);
+
+        $days = intdiv($seconds, 86400);
+        $seconds %= 86400;
+        $hours = intdiv($seconds, 3600);
+        $seconds %= 3600;
+        $minutes = intdiv($seconds, 60);
+        $seconds %= 60;
+
+        $parts = [];
+        if ($days > 0) {
+            $parts[] = $days . 'd';
+        }
+        if ($hours > 0) {
+            $parts[] = $hours . 'h';
+        }
+        if ($minutes > 0) {
+            $parts[] = $minutes . 'm';
+        }
+        if (empty($parts) || $seconds > 0) {
+            $parts[] = $seconds . 's';
+        }
+
+        return implode(' ', $parts);
+    }
+
+    protected function formatDurationValue($value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        if (is_numeric($value)) {
+            return $this->formatDurationSeconds((int)$value);
+        }
+
+        $raw = trim((string)$value);
+        if ($raw === '') {
+            return null;
+        }
+
+        if (preg_match('/^\d+:[0-5]\d(?::[0-5]\d)?$/', $raw) === 1) {
+            $parts = explode(':', $raw);
+            if (count($parts) === 2) {
+                [$hours, $minutes] = $parts;
+                return $this->formatDurationSeconds(((int)$hours * 3600) + ((int)$minutes * 60));
+            }
+            if (count($parts) === 3) {
+                [$hours, $minutes, $seconds] = $parts;
+                return $this->formatDurationSeconds(((int)$hours * 3600) + ((int)$minutes * 60) + (int)$seconds);
+            }
+        }
+
+        if (preg_match('/^\d+\s*[dhms]/i', $raw) === 1) {
+            return $raw;
+        }
+
+        try {
+            $timezone = $this->resolveDisplayTimezone();
+            $dateTime = new \DateTimeImmutable($raw, $timezone);
+            $now = new \DateTimeImmutable('now', $timezone);
+            $diff = $now->getTimestamp() - $dateTime->getTimestamp();
+
+            if ($diff >= 0) {
+                return $this->formatDurationSeconds($diff);
+            }
+        } catch (\Throwable $e) {
+            // Ignore and return the raw value below.
+        }
+
+        return $raw;
+    }
+
+    protected function resolveUserOnlineDuration(array $user): ?string
+    {
+        $durationFields = [
+            'online_duration',
+            'online_time',
+            'time_on',
+            'session_time',
+            'timeonline',
+            'uptime',
+        ];
+
+        foreach ($durationFields as $field) {
+            $duration = $this->formatDurationValue($user[$field] ?? null);
+            if ($duration !== null) {
+                return $duration;
+            }
+        }
+
+        if (empty($user['online'])) {
+            return null;
+        }
+
+        return $this->formatDurationValue($user['last_connection'] ?? null);
+    }
+
+    protected function resolveOnuOnlineDuration(array $onu): ?string
+    {
+        $duration = $this->formatDurationValue($onu['online_duration'] ?? null);
+        if ($duration !== null) {
+            return $duration;
+        }
+
+        $status = strtolower(trim((string)($onu['status'] ?? '')));
+        $isOnline = strpos($status, 'up') !== false
+            || strpos($status, 'online') !== false
+            || strpos($status, 'active') !== false;
+
+        if (!$isOnline) {
+            return null;
+        }
+
+        return $this->formatDurationValue($onu['last_reg'] ?? null);
     }
 
     protected function formatPhoneInternational($value): string

@@ -7,10 +7,16 @@ RUN apt-get update \
         libicu-dev \
         libonig-dev \
         libzip-dev \
+        tzdata \
         unzip \
     && docker-php-ext-install pdo_mysql mbstring bcmath intl zip sockets \
     && a2enmod rewrite \
     && rm -rf /var/lib/apt/lists/*
+
+ENV TZ=Europe/Kiev
+
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
+    && echo $TZ > /etc/timezone
 
 COPY --from=composer:2.7 /usr/bin/composer /usr/bin/composer
 
