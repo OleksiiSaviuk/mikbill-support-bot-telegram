@@ -82,7 +82,7 @@ class TicketService
               s.statustypename,
               COUNT(m.messageid) AS messages_total,
               SUM(CASE WHEN m.stuffid = 0 THEN 1 ELSE 0 END) AS client_messages_total,
-              SUM(CASE WHEN m.stuffid = 0 AND m.unread = 0 THEN 1 ELSE 0 END) AS new_messages_total,
+              SUM(CASE WHEN m.stuffid = 0 AND m.unread = 1 THEN 1 ELSE 0 END) AS new_messages_total,
               MAX(m.date) AS last_message_date
             FROM tickets_tickets t
             LEFT JOIN tickets_categories_list c ON c.categoryid = t.categoryid
@@ -388,14 +388,14 @@ class TicketService
             SELECT
               COUNT(*) AS messages_total,
               SUM(CASE WHEN stuffid = 0 THEN 1 ELSE 0 END) AS client_messages_total,
-              SUM(CASE WHEN stuffid = 0 AND unread = 0 THEN 1 ELSE 0 END) AS new_messages_total
+                            SUM(CASE WHEN stuffid = 0 AND unread = 1 THEN 1 ELSE 0 END) AS new_messages_total
             FROM tickets_messages
             WHERE ticketid = :ticketid
         ";
 
         try {
             $statement = $pdo->prepare($sql);
-            $statement->execute(['ticketid' => $ticketId]);
+                        $statement->execute(['ticketid' => $ticketId]);
             $row = $statement->fetch();
 
             if (!$row) {
@@ -414,6 +414,36 @@ class TicketService
             ]);
 
             return $result;
+        }
+    }
+
+    public function markClientMessagesAsRead(int $ticketId): bool
+    {
+        $pdo = $this->getPdo();
+
+        if (!$pdo) {
+            return false;
+        }
+
+        $sql = "
+            UPDATE tickets_messages
+                        SET unread = 0
+            WHERE ticketid = :ticketid
+              AND stuffid = 0
+                            AND unread = 1
+        ";
+
+        try {
+            $statement = $pdo->prepare($sql);
+
+            return $statement->execute(['ticketid' => $ticketId]);
+        } catch (Throwable $e) {
+            Log::warning('Failed to mark client ticket messages as read', [
+                'message' => $e->getMessage(),
+                'ticket_id' => $ticketId,
+            ]);
+
+            return false;
         }
     }
 }

@@ -282,6 +282,7 @@ MIKBILL_TICKETS_DB_PASSWORD=strong_password
     - `tickets_priorities_types`
 - `INSERT` у `tickets_messages`
 - `UPDATE` у `tickets_tickets`
+- `UPDATE` поля `tickets_messages.unread`, щоб позначати клієнтські повідомлення як прочитані після відкриття тікета
 
 Приклад (MySQL/MariaDB):
 
@@ -295,10 +296,13 @@ GRANT SELECT ON mikbill.tickets_categories_list TO 'tg_ticket_bot'@'127.0.0.1';
 GRANT SELECT ON mikbill.tickets_priorities_types TO 'tg_ticket_bot'@'127.0.0.1';
 
 GRANT INSERT ON mikbill.tickets_messages TO 'tg_ticket_bot'@'127.0.0.1';
+GRANT UPDATE (unread) ON mikbill.tickets_messages TO 'tg_ticket_bot'@'127.0.0.1';
 GRANT UPDATE ON mikbill.tickets_tickets TO 'tg_ticket_bot'@'127.0.0.1';
 
 FLUSH PRIVILEGES;
 ```
+
+Якщо у вашій збірці MySQL/MariaDB недоступні колонкові `UPDATE`-права, замість цього видайте табличний `UPDATE` на `tickets_messages`.
 
 Якщо хост БД інший, замініть `'127.0.0.1'` на потрібний хост (наприклад `'%'` тільки якщо це дійсно необхідно).
 

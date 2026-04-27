@@ -774,6 +774,7 @@ class CallBackCommand extends Command
         }
 
         $messages = $service->getMessages($ticketId);
+        $service->markClientMessagesAsRead($ticketId);
         $counters = $service->getTicketCounters($ticketId);
 
         $header = '';

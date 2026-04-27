@@ -283,6 +283,7 @@ The ticket workflow needs only these operations:
     - `tickets_priorities_types`
 - `INSERT` into `tickets_messages`
 - `UPDATE` on `tickets_tickets`
+- `UPDATE` on `tickets_messages.unread` to mark client messages as read after opening a ticket
 
 Example (MySQL/MariaDB):
 
@@ -296,10 +297,13 @@ GRANT SELECT ON mikbill.tickets_categories_list TO 'tg_ticket_bot'@'127.0.0.1';
 GRANT SELECT ON mikbill.tickets_priorities_types TO 'tg_ticket_bot'@'127.0.0.1';
 
 GRANT INSERT ON mikbill.tickets_messages TO 'tg_ticket_bot'@'127.0.0.1';
+GRANT UPDATE (unread) ON mikbill.tickets_messages TO 'tg_ticket_bot'@'127.0.0.1';
 GRANT UPDATE ON mikbill.tickets_tickets TO 'tg_ticket_bot'@'127.0.0.1';
 
 FLUSH PRIVILEGES;
 ```
+
+If column-level `UPDATE` grants are not available in your MySQL/MariaDB setup, grant table-level `UPDATE` on `tickets_messages` instead.
 
 If your DB host differs, replace `'127.0.0.1'` with the required host (for example `'%'` only if really needed).
 
