@@ -608,7 +608,36 @@ class CallBackCommand extends Command
                 $statusKey = (string)($parts[3] ?? '');
 
                 if ($ticketId > 0 && $statusKey !== '') {
+                    $this->requestTicketStatusChangeConfirm($ticketId, $statusKey);
+                    return;
+                }
+                break;
+
+            case 'status_next':
+                $ticketId = isset($parts[2]) ? (int)$parts[2] : 0;
+                $statusKey = (string)($parts[3] ?? '');
+
+                if ($ticketId > 0 && $statusKey !== '') {
+                    $this->requestTicketStatusChangeConfirm($ticketId, $statusKey);
+                    return;
+                }
+                break;
+
+            case 'status_apply':
+                $ticketId = isset($parts[2]) ? (int)$parts[2] : 0;
+                $statusKey = (string)($parts[3] ?? '');
+
+                if ($ticketId > 0 && $statusKey !== '') {
                     $this->changeTicketStatus($ticketId, $statusKey);
+                    return;
+                }
+                break;
+
+            case 'status_cancel':
+                $ticketId = isset($parts[2]) ? (int)$parts[2] : 0;
+
+                if ($ticketId > 0) {
+                    $this->sendTicketView($ticketId);
                     return;
                 }
                 break;
@@ -788,7 +817,7 @@ class CallBackCommand extends Command
             $chunks[] = $current;
         }
 
-        $keyboard = $this->buildTicketViewKeyboard($ticketId);
+        $keyboard = $this->buildTicketViewKeyboard($ticketId, (int)($ticket->statustypeid ?? 0));
 
         foreach ($chunks as $index => $chunk) {
             $payload = [
@@ -958,12 +987,25 @@ class CallBackCommand extends Command
         }
 
         $service = new TicketService();
+        $ticket = $service->getTicket($ticketId);
 
-        if (!$service->ticketExists($ticketId)) {
+        if (!$ticket) {
             $this->sendMessage([
                 'text' => trans('tickets_not_found_single', ['ticket' => $ticketId]),
                 'parse_mode' => 'HTML',
             ]);
+            return;
+        }
+
+        $currentStatusId = (int)($ticket->statustypeid ?? 0);
+        $expectedNextStatusKey = $this->getNextTicketStatusKey($currentStatusId);
+
+        if ($expectedNextStatusKey === null || $expectedNextStatusKey !== $statusKey) {
+            $this->sendMessage([
+                'text' => trans('tickets_status_update_error'),
+                'parse_mode' => 'HTML',
+            ]);
+            $this->sendTicketView($ticketId);
             return;
         }
 
@@ -983,6 +1025,68 @@ class CallBackCommand extends Command
         ]);
 
         $this->sendTicketView($ticketId);
+    }
+
+    private function requestTicketStatusChangeConfirm(int $ticketId, string $statusKey): void
+    {
+        $statusMap = [
+            'opened' => 1,
+            'closed' => 2,
+            'in_work' => 3,
+            'performed' => 4,
+        ];
+
+        if (!isset($statusMap[$statusKey])) {
+            $this->answerCallback(trans('tickets_status_update_error'));
+            return;
+        }
+
+        $service = new TicketService();
+        $ticket = $service->getTicket($ticketId);
+
+        if (!$ticket) {
+            $this->sendMessage([
+                'text' => trans('tickets_not_found_single', ['ticket' => $ticketId]),
+                'parse_mode' => 'HTML',
+            ]);
+            return;
+        }
+
+        $currentStatusId = (int)($ticket->statustypeid ?? 0);
+        $expectedNextStatusKey = $this->getNextTicketStatusKey($currentStatusId);
+
+        if ($expectedNextStatusKey === null || $expectedNextStatusKey !== $statusKey) {
+            $this->sendMessage([
+                'text' => trans('tickets_status_update_error'),
+                'parse_mode' => 'HTML',
+            ]);
+            $this->sendTicketView($ticketId);
+            return;
+        }
+
+        $statusLabel = $this->resolveTicketStatusLabel($statusMap[$statusKey], $statusKey);
+
+        $this->sendMessage([
+            'text' => trans('tickets_status_confirm_title', [
+                'ticket' => $ticketId,
+                'status' => $statusLabel,
+            ]),
+            'parse_mode' => 'HTML',
+            'reply_markup' => [
+                'inline_keyboard' => [
+                    [
+                        [
+                            'text' => trans('tickets_status_confirm_yes'),
+                            'callback_data' => 'tickets:status_apply:' . $ticketId . ':' . $statusKey,
+                        ],
+                        [
+                            'text' => trans('tickets_status_confirm_no'),
+                            'callback_data' => 'tickets:status_cancel:' . $ticketId,
+                        ],
+                    ],
+                ],
+            ],
+        ]);
     }
 
     private function showTicketSubscriberInfo(int $ticketId): void
@@ -1026,8 +1130,70 @@ class CallBackCommand extends Command
         }
     }
 
-    private function buildTicketViewKeyboard(int $ticketId): array
+    private function buildTicketViewKeyboard(int $ticketId, int $currentStatusId): array
     {
+        $nextStatusKey = $this->getNextTicketStatusKey($currentStatusId);
+
+        $statusButtonRow = [];
+
+        if ($nextStatusKey !== null) {
+            $statusButtonLabelMap = [
+                'opened' => trans('tickets_status_opened_button'),
+                'in_work' => trans('tickets_status_in_work_button'),
+                'performed' => trans('tickets_status_performed_button'),
+                'closed' => trans('tickets_status_closed_button'),
+            ];
+
+            $statusButtonRow[] = [
+                'text' => $statusButtonLabelMap[$nextStatusKey] ?? trans('tickets_status_in_work_button'),
+                'callback_data' => 'tickets:status_next:' . $ticketId . ':' . $nextStatusKey,
+            ];
+        }
+
+        $keyboard = [
+            [
+                [
+                    'text' => trans('tickets_reply_button'),
+                    'callback_data' => 'tickets:reply:' . $ticketId,
+                ],
+            ],
+        ];
+
+        if (!empty($statusButtonRow)) {
+            $keyboard[] = $statusButtonRow;
+        }
+
+        $keyboard[] = [
+            [
+                'text' => trans('tickets_subscriber_info_button'),
+                'callback_data' => 'tickets:subscriber_info:' . $ticketId,
+            ],
+        ];
+
+        $keyboard[] = [
+            [
+                'text' => trans('tickets_refresh'),
+                'callback_data' => 'tickets:refresh:' . $ticketId,
+            ],
+            [
+                'text' => trans('tickets_back_to_list'),
+                'callback_data' => 'tickets:back',
+            ],
+        ];
+
+        return $keyboard;
+    }
+
+    private function getNextTicketStatusKey(int $currentStatusId): ?string
+    {
+        $flow = [
+            1 => 'in_work',
+            3 => 'performed',
+            4 => 'closed',
+        ];
+
+        return $flow[$currentStatusId] ?? null;
+    }
         return [
             [
                 [
@@ -1209,24 +1375,7 @@ class CallBackCommand extends Command
             'text'         => "<b>" . trans("main_menu") . "</b>",
             'parse_mode'   => 'HTML',
             'reply_markup' => [
-                'inline_keyboard' => [
-                    [
-                        [
-                            "text"          => trans("menu_search"),
-                            "callback_data" => "menuSearch"
-                        ],
-                        [
-                            "text"          => trans("menu_locale"),
-                            "callback_data" => "menuLocale"
-                        ]
-                    ],
-                    [
-                        [
-                            "text"          => trans("menu_clear_history"),
-                            "callback_data" => "menuClearHistory"
-                        ]
-                    ]
-                ]
+                'inline_keyboard' => $this->buildMainMenuInlineKeyboard(),
             ]
         ]);
     }
