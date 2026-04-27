@@ -59,6 +59,10 @@ return [
             'history_purge_interval_seconds' => env('TELEGRAM_HISTORY_PURGE_INTERVAL_SECONDS', 300),
             'history_delete_batch_size' => env('TELEGRAM_HISTORY_DELETE_BATCH_SIZE', 25),
             'default_phone_country_code' => env('TELEGRAM_DEFAULT_PHONE_COUNTRY_CODE', ''),
+            'tickets_enabled' => env('MIKBILL_TICKETS_ENABLED', false),
+            'tickets_limit' => env('MIKBILL_TICKETS_LIMIT', 10),
+            'tickets_operators' => env('MIKBILL_TICKETS_OPERATORS', ''),
+            'tickets_max_message_length' => env('MIKBILL_TICKETS_MAX_MESSAGE_LENGTH', 500),
             'timezone' => env('TELEGRAM_TIMEZONE', env('APP_TIMEZONE', 'Europe/Kiev')),
         ],
 

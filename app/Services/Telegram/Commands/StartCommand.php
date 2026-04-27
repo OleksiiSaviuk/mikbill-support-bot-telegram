@@ -60,24 +60,7 @@ class StartCommand extends Command
                 'text'         => "<b>" . trans("main_menu") . "</b>",
                 'parse_mode'   => 'HTML',
                 'reply_markup' => [
-                    'inline_keyboard' => [
-                        [
-                            [
-                                "text"          => trans("menu_search"),
-                                "callback_data" => "menuSearch"
-                            ],
-                            [
-                                "text"          => trans("menu_locale"),
-                                "callback_data" => "menuLocale"
-                            ]
-                        ],
-                        [
-                            [
-                                "text"          => trans("menu_clear_history"),
-                                "callback_data" => "menuClearHistory"
-                            ]
-                        ]
-                    ]
+                    'inline_keyboard' => $this->buildMainMenuInlineKeyboard(),
                 ]
             ]);
 

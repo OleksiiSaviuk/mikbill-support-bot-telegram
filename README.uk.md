@@ -229,6 +229,79 @@ resources/lang/uk.json
 resources/lang/en.json
 ```
 
+### 3.6 Тікети MikBill у Telegram (прямий MySQL)
+
+Бот підтримує роботу з тікетами MikBill напряму через MySQL:
+
+- Показ останніх тікетів у Telegram (кнопка `🎫 Тікети` в головному меню)
+- Відкриття тікета і перегляд повної історії повідомлень
+- Відповідь оператора в `tickets_messages`
+- Зміна статусу тікета (`opened`, `in_work`, `performed`, `closed`)
+- Відкриття інформації абонента по `useruid` із тікета
+
+Доступ обмежений:
+
+- Функціонал має бути увімкнений в env
+- Telegram користувач має бути зіставлений з operator id у `MIKBILL_TICKETS_OPERATORS`
+
+Додайте в `.env`:
+
+```shell script
+# Увімкнути/вимкнути розділ тікетів у боті
+MIKBILL_TICKETS_ENABLED=true
+
+# Кількість тікетів у списку
+MIKBILL_TICKETS_LIMIT=10
+
+# Мапа: MikBill operator_id : Telegram user_id
+# Приклад для одного оператора:
+MIKBILL_TICKETS_OPERATORS="[1:111111]"
+# Приклад для кількох операторів:
+# MIKBILL_TICKETS_OPERATORS="[1:111111,2:222222]"
+
+# Максимальна довжина відповіді оператора
+MIKBILL_TICKETS_MAX_MESSAGE_LENGTH=500
+
+# Окреме MySQL-підключення до таблиць тікетів
+MIKBILL_TICKETS_DB_HOST=127.0.0.1
+MIKBILL_TICKETS_DB_PORT=3306
+MIKBILL_TICKETS_DB_NAME=mikbill
+MIKBILL_TICKETS_DB_USER=tg_ticket_bot
+MIKBILL_TICKETS_DB_PASSWORD=strong_password
+```
+
+### 3.7 Мінімальні права MySQL для функціоналу тікетів
+
+Для роботи з тікетами потрібні лише такі операції:
+
+- `SELECT` з:
+    - `tickets_tickets`
+    - `tickets_messages`
+    - `tickets_status_types`
+    - `tickets_categories_list`
+    - `tickets_priorities_types`
+- `INSERT` у `tickets_messages`
+- `UPDATE` у `tickets_tickets`
+
+Приклад (MySQL/MariaDB):
+
+```sql
+CREATE USER 'tg_ticket_bot'@'127.0.0.1' IDENTIFIED BY 'strong_password';
+
+GRANT SELECT ON mikbill.tickets_tickets TO 'tg_ticket_bot'@'127.0.0.1';
+GRANT SELECT ON mikbill.tickets_messages TO 'tg_ticket_bot'@'127.0.0.1';
+GRANT SELECT ON mikbill.tickets_status_types TO 'tg_ticket_bot'@'127.0.0.1';
+GRANT SELECT ON mikbill.tickets_categories_list TO 'tg_ticket_bot'@'127.0.0.1';
+GRANT SELECT ON mikbill.tickets_priorities_types TO 'tg_ticket_bot'@'127.0.0.1';
+
+GRANT INSERT ON mikbill.tickets_messages TO 'tg_ticket_bot'@'127.0.0.1';
+GRANT UPDATE ON mikbill.tickets_tickets TO 'tg_ticket_bot'@'127.0.0.1';
+
+FLUSH PRIVILEGES;
+```
+
+Якщо хост БД інший, замініть `'127.0.0.1'` на потрібний хост (наприклад `'%'` тільки якщо це дійсно необхідно).
+
 ### 4. Webhook
 
 Встановити webhook:

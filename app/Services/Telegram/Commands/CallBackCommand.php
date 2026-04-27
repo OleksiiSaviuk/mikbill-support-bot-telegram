@@ -5,6 +5,7 @@ namespace App\Services\Telegram\Commands;
 
 use App\Helpers\Helpers;
 use App\Services\MikBill\Admin\API;
+use App\Services\MikBill\TicketService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use WeStacks\TeleBot\Objects\Update;
@@ -28,6 +29,11 @@ class CallBackCommand extends Command
     public function handle()
     {
         $callbackData = (string)($this->update->callback_query->data ?? '');
+
+        if (strpos($callbackData, 'tickets:') === 0) {
+            $this->handleTicketCallback($callbackData);
+            return;
+        }
 
         if (strpos($callbackData, 'refresh_wc:') === 0 || strpos($callbackData, 'refresh_onu:') === 0) {
             $this->refreshOnu($callbackData);
@@ -549,6 +555,650 @@ class CallBackCommand extends Command
             ]);
         }
 
+    }
+
+    private function handleTicketCallback(string $callbackData): void
+    {
+        if (!$this->canAccessTickets()) {
+            $this->answerCallback(trans('tickets_access_denied'));
+            return;
+        }
+
+        $parts = explode(':', $callbackData);
+        $action = $parts[1] ?? '';
+
+        switch ($action) {
+            case 'list':
+            case 'back':
+                $this->sendTicketsList();
+                return;
+
+            case 'open':
+            case 'refresh':
+                $ticketId = isset($parts[2]) ? (int)$parts[2] : 0;
+                if ($ticketId > 0) {
+                    $this->sendTicketView($ticketId);
+                    return;
+                }
+                break;
+
+            case 'reply':
+                $ticketId = isset($parts[2]) ? (int)$parts[2] : 0;
+                if ($ticketId > 0) {
+                    $this->startTicketReply($ticketId);
+                    return;
+                }
+                break;
+
+            case 'reply_confirm':
+                $ticketId = isset($parts[2]) ? (int)$parts[2] : 0;
+                if ($ticketId > 0) {
+                    $this->confirmTicketReply($ticketId);
+                    return;
+                }
+                break;
+
+            case 'reply_cancel':
+                $ticketId = isset($parts[2]) ? (int)$parts[2] : 0;
+                $this->cancelTicketReply($ticketId);
+                return;
+
+            case 'status':
+                $ticketId = isset($parts[2]) ? (int)$parts[2] : 0;
+                $statusKey = (string)($parts[3] ?? '');
+
+                if ($ticketId > 0 && $statusKey !== '') {
+                    $this->changeTicketStatus($ticketId, $statusKey);
+                    return;
+                }
+                break;
+
+            case 'subscriber_info':
+                $ticketId = isset($parts[2]) ? (int)$parts[2] : 0;
+                if ($ticketId > 0) {
+                    $this->showTicketSubscriberInfo($ticketId);
+                    return;
+                }
+                break;
+        }
+
+        $this->answerCallback(trans('menu_not_work'));
+    }
+
+    private function sendTicketsList(): void
+    {
+        $this->setLastAction('tickets:list');
+        $this->clearTicketReplyState();
+        $this->clearPendingTicketReply();
+
+        $service = new TicketService();
+        $limit = $this->getTicketsListLimit();
+        $tickets = $service->getLatestTickets($limit);
+
+        $title = trans('tickets_latest_title', ['count' => $limit]);
+        $text = "🎫 " . $this->escapeHtml($title) . "\n\n";
+
+        if (empty($tickets)) {
+            $text .= trans('tickets_not_found');
+
+            $this->sendMessage([
+                'text' => $text,
+                'parse_mode' => 'HTML',
+                'reply_markup' => [
+                    'inline_keyboard' => [
+                        [
+                            [
+                                'text' => trans('tickets_refresh'),
+                                'callback_data' => 'tickets:list',
+                            ],
+                            [
+                                'text' => trans('menu_main'),
+                                'callback_data' => 'menuMain',
+                            ],
+                        ],
+                    ],
+                ],
+            ]);
+
+            return;
+        }
+
+        $ticketButtons = [];
+
+        foreach ($tickets as $ticket) {
+            $ticketId = (int)($ticket->ticketid ?? 0);
+            if ($ticketId <= 0) {
+                continue;
+            }
+
+            $status = $this->resolveTicketStatusLabel((int)($ticket->statustypeid ?? 0), (string)($ticket->statustypename ?? ''));
+            $priority = $this->resolveTicketPriorityLabel((int)($ticket->prioritytypeid ?? 0), (string)($ticket->prioritytypename ?? ''));
+            $category = $this->resolveTicketCategoryLabel((int)($ticket->categoryid ?? 0), (string)($ticket->categoryname ?? ''));
+            $uid = (int)($ticket->useruid ?? 0);
+            $messagesTotal = (int)($ticket->messages_total ?? 0);
+            $newMessagesTotal = (int)($ticket->new_messages_total ?? 0);
+            $date = $this->formatTicketDate($ticket->last_message_date ?? $ticket->creationdate ?? null, 'd.m.Y H:i');
+
+            $text .= '#' . $ticketId . ' | ' . $status . ' | ' . $priority . "\n";
+            $text .= $category . "\n";
+            $text .= 'UID: ' . $uid . "\n";
+            $text .= trans('tickets_messages_counters', [
+                'total' => $messagesTotal,
+                'new' => $newMessagesTotal,
+            ]) . "\n";
+            $text .= '🕒 ' . $this->escapeHtml($date) . "\n\n";
+
+            $ticketButtons[] = [
+                'text' => '#' . $ticketId,
+                'callback_data' => 'tickets:open:' . $ticketId,
+            ];
+        }
+
+        $keyboard = [];
+        $chunkedButtons = array_chunk($ticketButtons, 3);
+
+        foreach ($chunkedButtons as $row) {
+            $keyboard[] = $row;
+        }
+
+        $keyboard[] = [
+            [
+                'text' => trans('tickets_refresh'),
+                'callback_data' => 'tickets:list',
+            ],
+            [
+                'text' => trans('menu_main'),
+                'callback_data' => 'menuMain',
+            ],
+        ];
+
+        $this->sendMessage([
+            'text' => trim($text),
+            'parse_mode' => 'HTML',
+            'reply_markup' => [
+                'inline_keyboard' => $keyboard,
+            ],
+        ]);
+    }
+
+    private function sendTicketView(int $ticketId): void
+    {
+        $service = new TicketService();
+        $ticket = $service->getTicket($ticketId);
+
+        if (!$ticket) {
+            $this->sendMessage([
+                'text' => trans('tickets_not_found_single', ['ticket' => $ticketId]),
+                'parse_mode' => 'HTML',
+                'reply_markup' => [
+                    'inline_keyboard' => [
+                        [
+                            [
+                                'text' => trans('tickets_back_to_list'),
+                                'callback_data' => 'tickets:back',
+                            ],
+                        ],
+                    ],
+                ],
+            ]);
+            return;
+        }
+
+        $messages = $service->getMessages($ticketId);
+        $counters = $service->getTicketCounters($ticketId);
+
+        $header = '';
+        $header .= '🎫 ' . trans('tickets_ticket_title', ['ticket' => $ticketId]) . "\n";
+        $header .= trans('tickets_label_status') . ': ' . $this->resolveTicketStatusLabel((int)($ticket->statustypeid ?? 0), (string)($ticket->statustypename ?? '')) . "\n";
+        $header .= trans('tickets_label_category') . ': ' . $this->resolveTicketCategoryLabel((int)($ticket->categoryid ?? 0), (string)($ticket->categoryname ?? '')) . "\n";
+        $header .= trans('tickets_label_priority') . ': ' . $this->resolveTicketPriorityLabel((int)($ticket->prioritytypeid ?? 0), (string)($ticket->prioritytypename ?? '')) . "\n";
+        $header .= 'UID: ' . (int)($ticket->useruid ?? 0) . "\n";
+        $header .= trans('tickets_label_created') . ': ' . $this->formatTicketDate($ticket->creationdate ?? null, 'd.m.Y H:i') . "\n";
+        $header .= trans('tickets_messages_counters', [
+            'total' => (int)($counters->messages_total ?? 0),
+            'new' => (int)($counters->new_messages_total ?? 0),
+        ]) . "\n\n";
+        $header .= "💬 " . trans('tickets_history_title') . ":\n";
+
+        $chunks = [];
+        $current = $header;
+        $chunkLimit = 3600;
+
+        foreach ($messages as $messageRow) {
+            $messageText = trim((string)($messageRow->message ?? ''));
+            $messageText = $messageText === '' ? trans('tickets_empty_message') : $messageText;
+            $messageText = $this->escapeHtml($messageText);
+
+            $author = ((int)($messageRow->stuffid ?? 0) > 0)
+                ? trans('tickets_author_operator')
+                : trans('tickets_author_client');
+
+            $block = '[' . $this->formatTicketDate($messageRow->date ?? null, 'd.m H:i') . '] ' . $author . ":\n";
+            $block .= $messageText . "\n\n";
+
+            if (mb_strlen($current . $block) > $chunkLimit) {
+                $chunks[] = $current;
+                $current = $block;
+            } else {
+                $current .= $block;
+            }
+        }
+
+        if ($current !== '') {
+            $chunks[] = $current;
+        }
+
+        $keyboard = $this->buildTicketViewKeyboard($ticketId);
+
+        foreach ($chunks as $index => $chunk) {
+            $payload = [
+                'text' => trim($chunk),
+                'parse_mode' => 'HTML',
+            ];
+
+            if ($index === count($chunks) - 1) {
+                $payload['reply_markup'] = [
+                    'inline_keyboard' => $keyboard,
+                ];
+            }
+
+            $this->sendMessage($payload);
+        }
+    }
+
+    private function startTicketReply(int $ticketId): void
+    {
+        $service = new TicketService();
+
+        if (!$service->ticketExists($ticketId)) {
+            $this->sendMessage([
+                'text' => trans('tickets_not_found_single', ['ticket' => $ticketId]),
+                'parse_mode' => 'HTML',
+            ]);
+            return;
+        }
+
+        $this->setLastAction('waiting_ticket_reply');
+        $this->clearPendingTicketReply();
+        $this->setTicketReplyState($ticketId);
+
+        $this->sendMessage([
+            'text' => trans('tickets_reply_enter_message', ['ticket' => $ticketId]),
+            'parse_mode' => 'HTML',
+            'reply_markup' => [
+                'inline_keyboard' => [
+                    [
+                        [
+                            'text' => trans('tickets_reply_cancel'),
+                            'callback_data' => 'tickets:reply_cancel:' . $ticketId,
+                        ],
+                        [
+                            'text' => trans('tickets_back_to_ticket'),
+                            'callback_data' => 'tickets:open:' . $ticketId,
+                        ],
+                    ],
+                ],
+            ],
+        ]);
+    }
+
+    private function confirmTicketReply(int $ticketId): void
+    {
+        $pendingReply = $this->getPendingTicketReply();
+
+        if (empty($pendingReply) || (int)($pendingReply['ticketid'] ?? 0) !== $ticketId) {
+            $this->sendMessage([
+                'text' => trans('tickets_reply_not_ready'),
+                'parse_mode' => 'HTML',
+            ]);
+            $this->sendTicketView($ticketId);
+            return;
+        }
+
+        $message = trim((string)($pendingReply['message'] ?? ''));
+
+        if ($message === '') {
+            $this->sendMessage([
+                'text' => trans('tickets_reply_empty_error'),
+                'parse_mode' => 'HTML',
+            ]);
+            $this->startTicketReply($ticketId);
+            return;
+        }
+
+        if (mb_strlen($message) > $this->getTicketsMaxMessageLength()) {
+            $this->sendMessage([
+                'text' => trans('tickets_reply_too_long', ['limit' => $this->getTicketsMaxMessageLength()]),
+                'parse_mode' => 'HTML',
+            ]);
+            $this->startTicketReply($ticketId);
+            return;
+        }
+
+        $service = new TicketService();
+        if (!$service->ticketExists($ticketId)) {
+            $this->clearTicketReplyState();
+            $this->clearPendingTicketReply();
+            $this->sendMessage([
+                'text' => trans('tickets_not_found_single', ['ticket' => $ticketId]),
+                'parse_mode' => 'HTML',
+            ]);
+            $this->sendTicketsList();
+            return;
+        }
+
+        $operatorId = $this->getCurrentTicketOperatorId();
+
+        if ($operatorId === null) {
+            $this->sendMessage([
+                'text' => trans('tickets_access_denied'),
+                'parse_mode' => 'HTML',
+            ]);
+            return;
+        }
+
+        $sent = $service->addReply($ticketId, $operatorId, $message);
+
+        if (!$sent) {
+            $this->sendMessage([
+                'text' => trans('tickets_reply_send_error'),
+                'parse_mode' => 'HTML',
+            ]);
+            return;
+        }
+
+        $this->clearTicketReplyState();
+        $this->clearPendingTicketReply();
+        $this->setLastAction('tickets:open');
+
+        $this->sendMessage([
+            'text' => trans('tickets_reply_sent', ['ticket' => $ticketId]),
+            'parse_mode' => 'HTML',
+        ]);
+
+        $this->sendTicketView($ticketId);
+    }
+
+    private function cancelTicketReply(int $ticketId = 0): void
+    {
+        $this->clearTicketReplyState();
+        $this->clearPendingTicketReply();
+
+        $this->sendMessage([
+            'text' => trans('tickets_reply_cancelled'),
+            'parse_mode' => 'HTML',
+        ]);
+
+        if ($ticketId > 0) {
+            $this->sendTicketView($ticketId);
+            return;
+        }
+
+        $this->sendTicketsList();
+    }
+
+    private function changeTicketStatus(int $ticketId, string $statusKey): void
+    {
+        $statusMap = [
+            'opened' => 1,
+            'closed' => 2,
+            'in_work' => 3,
+            'performed' => 4,
+        ];
+
+        if (!isset($statusMap[$statusKey])) {
+            $this->answerCallback(trans('tickets_status_update_error'));
+            return;
+        }
+
+        $operatorId = $this->getCurrentTicketOperatorId();
+        if ($operatorId === null) {
+            $this->answerCallback(trans('tickets_access_denied'));
+            return;
+        }
+
+        $service = new TicketService();
+
+        if (!$service->ticketExists($ticketId)) {
+            $this->sendMessage([
+                'text' => trans('tickets_not_found_single', ['ticket' => $ticketId]),
+                'parse_mode' => 'HTML',
+            ]);
+            return;
+        }
+
+        $ok = $service->changeStatus($ticketId, $statusMap[$statusKey], $operatorId);
+
+        if (!$ok) {
+            $this->sendMessage([
+                'text' => trans('tickets_status_update_error'),
+                'parse_mode' => 'HTML',
+            ]);
+            return;
+        }
+
+        $this->sendMessage([
+            'text' => trans('tickets_status_updated', ['status' => $this->resolveTicketStatusLabel($statusMap[$statusKey], $statusKey)]),
+            'parse_mode' => 'HTML',
+        ]);
+
+        $this->sendTicketView($ticketId);
+    }
+
+    private function showTicketSubscriberInfo(int $ticketId): void
+    {
+        $service = new TicketService();
+        $ticket = $service->getTicket($ticketId);
+
+        if (!$ticket) {
+            $this->sendMessage([
+                'text' => trans('tickets_not_found_single', ['ticket' => $ticketId]),
+                'parse_mode' => 'HTML',
+            ]);
+            return;
+        }
+
+        $uid = (int)($ticket->useruid ?? 0);
+
+        if ($uid <= 0) {
+            $this->sendMessage([
+                'text' => trans('tickets_subscriber_uid_missing'),
+                'parse_mode' => 'HTML',
+                'reply_markup' => [
+                    'inline_keyboard' => [
+                        [
+                            [
+                                'text' => trans('tickets_back_to_ticket'),
+                                'callback_data' => 'tickets:open:' . $ticketId,
+                            ],
+                        ],
+                    ],
+                ],
+            ]);
+            return;
+        }
+
+        if (!$this->sendSubscriberInfoByUid($uid)) {
+            $this->sendMessage([
+                'text' => trans('user_not_found'),
+                'parse_mode' => 'HTML',
+            ]);
+        }
+    }
+
+    private function buildTicketViewKeyboard(int $ticketId): array
+    {
+        return [
+            [
+                [
+                    'text' => trans('tickets_reply_button'),
+                    'callback_data' => 'tickets:reply:' . $ticketId,
+                ],
+            ],
+            [
+                [
+                    'text' => trans('tickets_status_opened_button'),
+                    'callback_data' => 'tickets:status:' . $ticketId . ':opened',
+                ],
+                [
+                    'text' => trans('tickets_status_in_work_button'),
+                    'callback_data' => 'tickets:status:' . $ticketId . ':in_work',
+                ],
+            ],
+            [
+                [
+                    'text' => trans('tickets_status_performed_button'),
+                    'callback_data' => 'tickets:status:' . $ticketId . ':performed',
+                ],
+                [
+                    'text' => trans('tickets_status_closed_button'),
+                    'callback_data' => 'tickets:status:' . $ticketId . ':closed',
+                ],
+            ],
+            [
+                [
+                    'text' => trans('tickets_subscriber_info_button'),
+                    'callback_data' => 'tickets:subscriber_info:' . $ticketId,
+                ],
+            ],
+            [
+                [
+                    'text' => trans('tickets_refresh'),
+                    'callback_data' => 'tickets:refresh:' . $ticketId,
+                ],
+                [
+                    'text' => trans('tickets_back_to_list'),
+                    'callback_data' => 'tickets:back',
+                ],
+            ],
+        ];
+    }
+
+    private function resolveTicketStatusLabel(int $statusId, string $statusName = ''): string
+    {
+        $map = [
+            1 => trans('tickets_status_opened'),
+            2 => trans('tickets_status_closed'),
+            3 => trans('tickets_status_in_work'),
+            4 => trans('tickets_status_performed'),
+        ];
+
+        if (isset($map[$statusId])) {
+            return $map[$statusId];
+        }
+
+        $normalized = strtolower(trim($statusName));
+        $nameMap = [
+            'opened' => trans('tickets_status_opened'),
+            'closed' => trans('tickets_status_closed'),
+            'in_work' => trans('tickets_status_in_work'),
+            'performed' => trans('tickets_status_performed'),
+        ];
+
+        if (isset($nameMap[$normalized])) {
+            return $nameMap[$normalized];
+        }
+
+        return $this->humanizeTicketValue($statusName);
+    }
+
+    private function resolveTicketPriorityLabel(int $priorityId, string $priorityName = ''): string
+    {
+        $map = [
+            1 => trans('tickets_priority_high'),
+            2 => trans('tickets_priority_normal'),
+            3 => trans('tickets_priority_low'),
+        ];
+
+        if (isset($map[$priorityId])) {
+            return $map[$priorityId];
+        }
+
+        $normalized = strtolower(trim($priorityName));
+        $nameMap = [
+            'high' => trans('tickets_priority_high'),
+            'normal' => trans('tickets_priority_normal'),
+            'low' => trans('tickets_priority_low'),
+        ];
+
+        if (isset($nameMap[$normalized])) {
+            return $nameMap[$normalized];
+        }
+
+        return $this->humanizeTicketValue($priorityName);
+    }
+
+    private function resolveTicketCategoryLabel(int $categoryId, string $categoryName = ''): string
+    {
+        $map = [
+            1 => trans('tickets_category_other'),
+            2 => trans('tickets_category_connection'),
+            3 => trans('tickets_category_maintenance'),
+            4 => trans('tickets_category_created_in_the_cabinet'),
+            5 => trans('tickets_category_cable_is_not_connected'),
+            6 => trans('tickets_category_ip_address_conflict'),
+            7 => trans('tickets_category_internet_does_not_work'),
+            8 => trans('tickets_category_pages_not_open'),
+            9 => trans('tickets_category_cable_replacement'),
+            10 => trans('tickets_category_does_not_work_the_whole_house'),
+            11 => trans('tickets_category_does_not_work_the_whole_sector'),
+            12 => trans('tickets_category_configuring_the_router'),
+        ];
+
+        if (isset($map[$categoryId])) {
+            return $map[$categoryId];
+        }
+
+        $normalized = strtolower(trim($categoryName));
+        $nameMap = [
+            'other' => trans('tickets_category_other'),
+            'connection' => trans('tickets_category_connection'),
+            'maintenance' => trans('tickets_category_maintenance'),
+            'created_in_the_cabinet' => trans('tickets_category_created_in_the_cabinet'),
+            'cable_is_not_connected' => trans('tickets_category_cable_is_not_connected'),
+            'ip_address_conflict' => trans('tickets_category_ip_address_conflict'),
+            'internet_does_not_work' => trans('tickets_category_internet_does_not_work'),
+            'pages_not_open' => trans('tickets_category_pages_not_open'),
+            'cable_replacement' => trans('tickets_category_cable_replacement'),
+            'does_not_work_the_whole_house' => trans('tickets_category_does_not_work_the_whole_house'),
+            'does_not_work_the_whole_sector' => trans('tickets_category_does_not_work_the_whole_sector'),
+            'configuring_the_router' => trans('tickets_category_configuring_the_router'),
+        ];
+
+        if (isset($nameMap[$normalized])) {
+            return $nameMap[$normalized];
+        }
+
+        return $this->humanizeTicketValue($categoryName);
+    }
+
+    private function humanizeTicketValue(string $value): string
+    {
+        $trimmed = trim($value);
+
+        if ($trimmed === '') {
+            return '-';
+        }
+
+        return ucfirst(str_replace('_', ' ', $trimmed));
+    }
+
+    private function formatTicketDate($value, string $format): string
+    {
+        $raw = trim((string)($value ?? ''));
+
+        if ($raw === '') {
+            return '-';
+        }
+
+        try {
+            $timezone = $this->resolveDisplayTimezone();
+            $date = new \DateTimeImmutable($raw, $timezone);
+
+            return $date->setTimezone($timezone)->format($format);
+        } catch (\Throwable $e) {
+            return $raw;
+        }
     }
 
     private function menuMain()

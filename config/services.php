@@ -35,6 +35,11 @@ return [
         'cabinet_host' => env('MIKBILL_CABINET_HOST'),
         'login'        => env('MIKBILL_LOGIN'),
         'pass'         => env('MIKBILL_PASSWORD'),
+        'tickets_db_host' => env('MIKBILL_TICKETS_DB_HOST'),
+        'tickets_db_port' => env('MIKBILL_TICKETS_DB_PORT', 3306),
+        'tickets_db_name' => env('MIKBILL_TICKETS_DB_NAME', env('DB_DATABASE')),
+        'tickets_db_user' => env('MIKBILL_TICKETS_DB_USER'),
+        'tickets_db_password' => env('MIKBILL_TICKETS_DB_PASSWORD'),
     ],
 
     'wildcore' => [

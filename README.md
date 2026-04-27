@@ -230,6 +230,79 @@ resources/lang/uk.json
 resources/lang/en.json
 ```
 
+### 3.6 MikBill tickets in Telegram (MySQL direct)
+
+The bot supports working with MikBill tickets directly via MySQL:
+
+- Show the latest tickets in Telegram (`🎫 Tickets` button in main menu)
+- Open a ticket and view full message history
+- Send operator replies to `tickets_messages`
+- Change ticket status (`opened`, `in_work`, `performed`, `closed`)
+- Open subscriber info by `useruid` from ticket
+
+Access is restricted:
+
+- Feature must be enabled in env
+- Telegram user must be mapped to MikBill operator id in `MIKBILL_TICKETS_OPERATORS`
+
+Add to `.env`:
+
+```shell script
+# Enable/disable MikBill tickets UI in bot
+MIKBILL_TICKETS_ENABLED=true
+
+# Number of tickets shown in list
+MIKBILL_TICKETS_LIMIT=10
+
+# Mapping: MikBill operator_id : Telegram user_id
+# Example with one operator:
+MIKBILL_TICKETS_OPERATORS="[1:111111]"
+# Example with multiple operators:
+# MIKBILL_TICKETS_OPERATORS="[1:111111,2:222222]"
+
+# Max operator reply length for one message
+MIKBILL_TICKETS_MAX_MESSAGE_LENGTH=500
+
+# Separate MySQL connection for ticket tables
+MIKBILL_TICKETS_DB_HOST=127.0.0.1
+MIKBILL_TICKETS_DB_PORT=3306
+MIKBILL_TICKETS_DB_NAME=mikbill
+MIKBILL_TICKETS_DB_USER=tg_ticket_bot
+MIKBILL_TICKETS_DB_PASSWORD=strong_password
+```
+
+### 3.7 Minimal MySQL permissions for ticket feature
+
+The ticket workflow needs only these operations:
+
+- `SELECT` from:
+    - `tickets_tickets`
+    - `tickets_messages`
+    - `tickets_status_types`
+    - `tickets_categories_list`
+    - `tickets_priorities_types`
+- `INSERT` into `tickets_messages`
+- `UPDATE` on `tickets_tickets`
+
+Example (MySQL/MariaDB):
+
+```sql
+CREATE USER 'tg_ticket_bot'@'127.0.0.1' IDENTIFIED BY 'strong_password';
+
+GRANT SELECT ON mikbill.tickets_tickets TO 'tg_ticket_bot'@'127.0.0.1';
+GRANT SELECT ON mikbill.tickets_messages TO 'tg_ticket_bot'@'127.0.0.1';
+GRANT SELECT ON mikbill.tickets_status_types TO 'tg_ticket_bot'@'127.0.0.1';
+GRANT SELECT ON mikbill.tickets_categories_list TO 'tg_ticket_bot'@'127.0.0.1';
+GRANT SELECT ON mikbill.tickets_priorities_types TO 'tg_ticket_bot'@'127.0.0.1';
+
+GRANT INSERT ON mikbill.tickets_messages TO 'tg_ticket_bot'@'127.0.0.1';
+GRANT UPDATE ON mikbill.tickets_tickets TO 'tg_ticket_bot'@'127.0.0.1';
+
+FLUSH PRIVILEGES;
+```
+
+If your DB host differs, replace `'127.0.0.1'` with the required host (for example `'%'` only if really needed).
+
 ### 4. Webhook
 
 Set webhook:
