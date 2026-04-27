@@ -21,6 +21,9 @@ A Telegram bot designed to help ISP support operators quickly look up subscriber
 - Connection type detection: ONU / switch port / unknown
 - International phone number formatting
 - Multi-language UI: 🇺🇦 Ukrainian, 🇬🇧 English
+- MikBill Tickets: list, view message history, reply as operator, change status (direct MySQL)
+- Auto-search by phone from `/start` deep link
+- Auto-cleanup of bot message history
 
 ### Changelog
 
@@ -51,6 +54,14 @@ A Telegram bot designed to help ISP support operators quickly look up subscriber
 - Localization expanded: uk / en (ru kept for compatibility)
 - Removed Russian-language code comments
 - Docker Compose setup with `app` + `mysql` services
+
+**27.04.2026**
+- MikBill Tickets integration: ticket list sorted by status/activity, full message history, operator reply, status changes (`opened` → `in_work` → `performed` → `closed`)
+- Separate MySQL connection for tickets (`MIKBILL_TICKETS_DB_*`) with minimal required permissions
+- Operator mapping via `MIKBILL_TICKETS_OPERATORS` (MikBill operator id ↔ Telegram user id)
+- Auto-search by phone from `/start` deep link (`TELEGRAM_ENABLE_START_PHONE_SEARCH`)
+- Auto-cleanup of bot message history with configurable retention, batch size, and interval
+- Configurable search results per page (`TELEGRAM_SEARCH_PER_PAGE`)
 
 
 ### Requirements
