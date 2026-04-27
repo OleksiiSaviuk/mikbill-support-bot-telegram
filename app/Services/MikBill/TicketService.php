@@ -89,6 +89,12 @@ class TicketService
             LEFT JOIN tickets_priorities_types p ON p.prioritytypeid = t.prioritytypeid
             LEFT JOIN tickets_status_types s ON s.statustypeid = t.statustypeid
             LEFT JOIN tickets_messages m ON m.ticketid = t.ticketid
+            WHERE t.statustypeid <> 2
+               OR NOT EXISTS (
+                    SELECT 1
+                    FROM tickets_tickets active_tickets
+                    WHERE active_tickets.statustypeid <> 2
+                )
             GROUP BY
               t.ticketid,
               t.creationdate,
@@ -107,15 +113,16 @@ class TicketService
               p.prioritytypename,
               t.statustypeid,
               s.statustypename
-            ORDER BY
-              CASE t.statustypeid
-                WHEN 3 THEN 0
-                WHEN 1 THEN 1
-                WHEN 4 THEN 2
-                WHEN 2 THEN 3
-                ELSE 4
-              END ASC,
-              COALESCE(MAX(m.date), t.creationdate) DESC
+                        ORDER BY
+                            CASE t.statustypeid
+                                WHEN 1 THEN 0
+                                WHEN 3 THEN 1
+                                WHEN 4 THEN 2
+                                WHEN 2 THEN 3
+                                ELSE 4
+                            END ASC,
+                            new_messages_total DESC,
+                            COALESCE(MAX(m.date), t.creationdate) DESC
             LIMIT {$validatedLimit}
         ";
 
