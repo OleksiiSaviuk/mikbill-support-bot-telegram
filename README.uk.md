@@ -20,6 +20,9 @@ Telegram-бот для операторів технічної підтримк�
 - Визначення типу підключення: ONU / порт комутатора / невідомо
 - Форматування номерів телефону у міжнародному форматі
 - Багатомовний інтерфейс: 🇺🇦 Українська, 🇬🇧 English
+- Тікети MikBill: список, перегляд повідомлень, відповідь оператора, зміна статусу (прямий MySQL)
+- Автопошук за телефоном з дип-посилання `/start`
+- Автоочистка історії повідомлень бота
 
 ### Changelog
 
@@ -50,6 +53,14 @@ Telegram-бот для операторів технічної підтримк�
 - Розширена локалізація: uk / en (ru залишено для сумісності)
 - Видалено коментарі російською з коду
 - Docker Compose із сервісами `app` + `mysql`
+
+**27.04.2026**
+- Інтеграція тікетів MikBill: список сортований за статусом/активністю, повна історія повідомлень, відповідь оператора, зміна статусу (`opened` → `in_work` → `performed` → `closed`)
+- Окреме MySQL-підключення для тікетів (`MIKBILL_TICKETS_DB_*`) з мінімальними необхідними правами
+- Мапа операторів через `MIKBILL_TICKETS_OPERATORS` (MikBill operator id ↔ Telegram user id)
+- Автопошук за телефоном з дип-посилання `/start` (`TELEGRAM_ENABLE_START_PHONE_SEARCH`)
+- Автоочистка історії повідомлень бота з налаштовуваним періодом зберігання, розміром пачіта і інтервалом
+- Налаштовувана кількість результатів пошуку на сторінку (`TELEGRAM_SEARCH_PER_PAGE`)
 
 
 ### Вимоги
@@ -228,6 +239,83 @@ APP_LOCALE=uk
 resources/lang/uk.json
 resources/lang/en.json
 ```
+
+### 3.6 Тікети MikBill у Telegram (прямий MySQL)
+
+Бот підтримує роботу з тікетами MikBill напряму через MySQL:
+
+- Показ останніх тікетів у Telegram (кнопка `🎫 Тікети` в головному меню)
+- Відкриття тікета і перегляд повної історії повідомлень
+- Відповідь оператора в `tickets_messages`
+- Зміна статусу тікета (`opened`, `in_work`, `performed`, `closed`)
+- Відкриття інформації абонента по `useruid` із тікета
+
+Доступ обмежений:
+
+- Функціонал має бути увімкнений в env
+- Telegram користувач має бути зіставлений з operator id у `MIKBILL_TICKETS_OPERATORS`
+
+Додайте в `.env`:
+
+```shell script
+# Увімкнути/вимкнути розділ тікетів у боті
+MIKBILL_TICKETS_ENABLED=true
+
+# Кількість тікетів у списку
+MIKBILL_TICKETS_LIMIT=10
+
+# Мапа: MikBill operator_id : Telegram user_id
+# Приклад для одного оператора:
+MIKBILL_TICKETS_OPERATORS="[1:111111]"
+# Приклад для кількох операторів:
+# MIKBILL_TICKETS_OPERATORS="[1:111111,2:222222]"
+
+# Максимальна довжина відповіді оператора
+MIKBILL_TICKETS_MAX_MESSAGE_LENGTH=500
+
+# Окреме MySQL-підключення до таблиць тікетів
+MIKBILL_TICKETS_DB_HOST=127.0.0.1
+MIKBILL_TICKETS_DB_PORT=3306
+MIKBILL_TICKETS_DB_NAME=mikbill
+MIKBILL_TICKETS_DB_USER=tg_ticket_bot
+MIKBILL_TICKETS_DB_PASSWORD=strong_password
+```
+
+### 3.7 Мінімальні права MySQL для функціоналу тікетів
+
+Для роботи з тікетами потрібні лише такі операції:
+
+- `SELECT` з:
+    - `tickets_tickets`
+    - `tickets_messages`
+    - `tickets_status_types`
+    - `tickets_categories_list`
+    - `tickets_priorities_types`
+- `INSERT` у `tickets_messages`
+- `UPDATE` у `tickets_tickets`
+- `UPDATE` поля `tickets_messages.unread`, щоб позначати клієнтські повідомлення як прочитані після відкриття тікета
+
+Приклад (MySQL/MariaDB):
+
+```sql
+CREATE USER 'tg_ticket_bot'@'127.0.0.1' IDENTIFIED BY 'strong_password';
+
+GRANT SELECT ON mikbill.tickets_tickets TO 'tg_ticket_bot'@'127.0.0.1';
+GRANT SELECT ON mikbill.tickets_messages TO 'tg_ticket_bot'@'127.0.0.1';
+GRANT SELECT ON mikbill.tickets_status_types TO 'tg_ticket_bot'@'127.0.0.1';
+GRANT SELECT ON mikbill.tickets_categories_list TO 'tg_ticket_bot'@'127.0.0.1';
+GRANT SELECT ON mikbill.tickets_priorities_types TO 'tg_ticket_bot'@'127.0.0.1';
+
+GRANT INSERT ON mikbill.tickets_messages TO 'tg_ticket_bot'@'127.0.0.1';
+GRANT UPDATE (unread) ON mikbill.tickets_messages TO 'tg_ticket_bot'@'127.0.0.1';
+GRANT UPDATE ON mikbill.tickets_tickets TO 'tg_ticket_bot'@'127.0.0.1';
+
+FLUSH PRIVILEGES;
+```
+
+Якщо у вашій збірці MySQL/MariaDB недоступні колонкові `UPDATE`-права, замість цього видайте табличний `UPDATE` на `tickets_messages`.
+
+Якщо хост БД інший, замініть `'127.0.0.1'` на потрібний хост (наприклад `'%'` тільки якщо це дійсно необхідно).
 
 ### 4. Webhook
 

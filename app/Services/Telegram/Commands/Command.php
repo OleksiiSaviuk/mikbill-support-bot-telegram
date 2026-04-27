@@ -148,6 +148,192 @@ abstract class Command extends CommandHandler
         Cache::forget($this->user_id . '_search_state');
         Cache::forget($this->user_id . '_start_phone_lock');
         Cache::forget($this->user_id . '_last_start_phone');
+        Cache::forget($this->user_id . '_ticket_reply_state');
+        Cache::forget($this->user_id . '_ticket_pending_reply');
+    }
+
+    protected function buildMainMenuInlineKeyboard(): array
+    {
+        $keyboard = [
+            [
+                [
+                    'text' => trans('menu_search'),
+                    'callback_data' => 'menuSearch',
+                ],
+                [
+                    'text' => trans('menu_locale'),
+                    'callback_data' => 'menuLocale',
+                ],
+            ],
+        ];
+
+        if ($this->canAccessTickets()) {
+            $keyboard[] = [
+                [
+                    'text' => trans('menu_tickets'),
+                    'callback_data' => 'tickets:list',
+                ],
+            ];
+        }
+
+        $keyboard[] = [
+            [
+                'text' => trans('menu_clear_history'),
+                'callback_data' => 'menuClearHistory',
+            ],
+        ];
+
+        return $keyboard;
+    }
+
+    protected function getCurrentTelegramUserId(): int
+    {
+        if ($this->user_id > 0) {
+            return (int)$this->user_id;
+        }
+
+        if (isset($this->update->message->from->id)) {
+            return (int)$this->update->message->from->id;
+        }
+
+        if (isset($this->update->callback_query->from->id)) {
+            return (int)$this->update->callback_query->from->id;
+        }
+
+        return 0;
+    }
+
+    protected function isTicketsFeatureEnabled(): bool
+    {
+        return filter_var(config('telebot.bots.bot.tickets_enabled', false), FILTER_VALIDATE_BOOLEAN);
+    }
+
+    protected function getTicketsListLimit(): int
+    {
+        return max(1, min(100, (int)config('telebot.bots.bot.tickets_limit', 10)));
+    }
+
+    protected function getTicketsMaxMessageLength(): int
+    {
+        return max(1, min(4000, (int)config('telebot.bots.bot.tickets_max_message_length', 500)));
+    }
+
+    protected function getTicketsOperatorMap(): array
+    {
+        $raw = trim((string)config('telebot.bots.bot.tickets_operators', ''));
+
+        if ($raw === '') {
+            return [];
+        }
+
+        $normalized = trim($raw, "[] \t\n\r\0\x0B");
+
+        if ($normalized === '') {
+            return [];
+        }
+
+        $pairs = preg_split('/\s*,\s*/', $normalized);
+        $map = [];
+
+        foreach ($pairs as $pair) {
+            if (!is_string($pair) || $pair === '') {
+                continue;
+            }
+
+            $parts = explode(':', $pair, 2);
+            if (count($parts) !== 2) {
+                continue;
+            }
+
+            $operatorId = (int)trim($parts[0]);
+            $telegramId = (int)trim($parts[1]);
+
+            if ($operatorId > 0 && $telegramId > 0) {
+                $map[$telegramId] = $operatorId;
+            }
+        }
+
+        return $map;
+    }
+
+    protected function getCurrentTicketOperatorId(): ?int
+    {
+        $telegramId = $this->getCurrentTelegramUserId();
+
+        if ($telegramId <= 0) {
+            return null;
+        }
+
+        $map = $this->getTicketsOperatorMap();
+
+        return isset($map[$telegramId]) ? (int)$map[$telegramId] : null;
+    }
+
+    protected function canAccessTickets(): bool
+    {
+        return $this->isTicketsFeatureEnabled() && $this->getCurrentTicketOperatorId() !== null;
+    }
+
+    protected function setTicketReplyState(int $ticketId): void
+    {
+        Cache::put($this->getTicketReplyStateKey(), [
+            'telegram_user_id' => $this->getCurrentTelegramUserId(),
+            'ticketid' => $ticketId,
+            'state' => 'waiting_ticket_reply',
+            'created_at' => now()->toDateTimeString(),
+        ], now()->addMinutes(30));
+    }
+
+    protected function getTicketReplyState(): ?array
+    {
+        $state = Cache::get($this->getTicketReplyStateKey());
+
+        if (!is_array($state)) {
+            return null;
+        }
+
+        return $state;
+    }
+
+    protected function clearTicketReplyState(): void
+    {
+        Cache::forget($this->getTicketReplyStateKey());
+    }
+
+    protected function setPendingTicketReply(int $ticketId, string $message): void
+    {
+        Cache::put($this->getTicketPendingReplyKey(), [
+            'telegram_user_id' => $this->getCurrentTelegramUserId(),
+            'ticketid' => $ticketId,
+            'message' => $message,
+            'created_at' => now()->toDateTimeString(),
+        ], now()->addMinutes(30));
+    }
+
+    protected function getPendingTicketReply(): ?array
+    {
+        $data = Cache::get($this->getTicketPendingReplyKey());
+
+        if (!is_array($data)) {
+            return null;
+        }
+
+        return $data;
+    }
+
+    protected function clearPendingTicketReply(): void
+    {
+        Cache::forget($this->getTicketPendingReplyKey());
+    }
+
+    private function getTicketReplyStateKey(): string
+    {
+        return $this->user_id . '_ticket_reply_state';
+    }
+
+    private function getTicketPendingReplyKey(): string
+    {
+        return $this->user_id . '_ticket_pending_reply';
     }
 
     protected function clearChatHistoryFromMessage(int $fromMessageId, int $limit = 0): void
@@ -498,6 +684,34 @@ abstract class Command extends CommandHandler
                 'inline_keyboard' => $keyboard
             ]
         ]);
+    }
+
+    protected function sendSubscriberInfoByUid(int $uid): bool
+    {
+        if ($uid <= 0) {
+            return false;
+        }
+
+        $api = new API();
+        $user = $api->getUserMB($uid);
+
+        if (empty($user)) {
+            return false;
+        }
+
+        $onu = $this->getOnuByClientMac($user['local_mac'] ?? null);
+        $systemOptions = $api->getSystemOptions();
+        $text = $this->buildUserCardMessage($user, $onu, $systemOptions);
+
+        $this->sendMessage([
+            'text'         => $text,
+            'parse_mode'   => 'HTML',
+            'reply_markup' => [
+                'inline_keyboard' => $this->buildUserCardInlineKeyboard($user, $onu),
+            ],
+        ]);
+
+        return true;
     }
 
     protected function storeSearchState(string $type, string $query, array $users): void
