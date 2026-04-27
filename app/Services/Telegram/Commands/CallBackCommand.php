@@ -1194,51 +1194,6 @@ class CallBackCommand extends Command
 
         return $flow[$currentStatusId] ?? null;
     }
-        return [
-            [
-                [
-                    'text' => trans('tickets_reply_button'),
-                    'callback_data' => 'tickets:reply:' . $ticketId,
-                ],
-            ],
-            [
-                [
-                    'text' => trans('tickets_status_opened_button'),
-                    'callback_data' => 'tickets:status:' . $ticketId . ':opened',
-                ],
-                [
-                    'text' => trans('tickets_status_in_work_button'),
-                    'callback_data' => 'tickets:status:' . $ticketId . ':in_work',
-                ],
-            ],
-            [
-                [
-                    'text' => trans('tickets_status_performed_button'),
-                    'callback_data' => 'tickets:status:' . $ticketId . ':performed',
-                ],
-                [
-                    'text' => trans('tickets_status_closed_button'),
-                    'callback_data' => 'tickets:status:' . $ticketId . ':closed',
-                ],
-            ],
-            [
-                [
-                    'text' => trans('tickets_subscriber_info_button'),
-                    'callback_data' => 'tickets:subscriber_info:' . $ticketId,
-                ],
-            ],
-            [
-                [
-                    'text' => trans('tickets_refresh'),
-                    'callback_data' => 'tickets:refresh:' . $ticketId,
-                ],
-                [
-                    'text' => trans('tickets_back_to_list'),
-                    'callback_data' => 'tickets:back',
-                ],
-            ],
-        ];
-    }
 
     private function resolveTicketStatusLabel(int $statusId, string $statusName = ''): string
     {
